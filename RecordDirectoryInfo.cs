@@ -63,7 +63,7 @@ namespace BetterInventoryBrowser
                 {
                     if (Uri.TryCreate(d.Url, UriKind.Absolute, out var recordUri))
                     {
-                        var record = (await Engine.Current.Cloud.GetRecord<Record>(recordUri))?.Entity;
+                        var record = (await Engine.Current.Cloud.GetRecordCached<Record>(recordUri))?.Entity;
                         previous = new RecordDirectory(record, previous, Engine.Current);
                     }
                 }
@@ -82,22 +82,23 @@ namespace BetterInventoryBrowser
             if (obj is null) return false;
             if (obj is RecordDirectory rd)
             {
-                return OwnerId == rd.OwnerId && Path == rd.Path;
+                if (rd.IsLink) return OwnerId == rd.OwnerId && Path == rd.Path && Url == rd.LinkRecord.URL.ToString();
+                else return OwnerId == rd.OwnerId && Path == rd.Path;
             }
             if (GetType() != obj.GetType()) return false;
             var c = (RecordDirectoryInfo)obj;
-            return OwnerId == c.OwnerId && Path == c.Path;
+            return OwnerId == c.OwnerId && Path == c.Path && Url == c.Url;
         }
 
         public override int GetHashCode()
         {
-            return OwnerId.GetHashCode() ^ Path.GetHashCode();
+            return OwnerId.GetHashCode() ^ Path.GetHashCode() ^ Url?.GetHashCode() ?? 0;
         }
 
         public bool Equals(RecordDirectoryInfo other)
         {
             if (other is null) return false;
-            return OwnerId == other.OwnerId && Path == other.Path;
+            return OwnerId == other.OwnerId && Path == other.Path && Url == other.Url;
         }
 
         public override string ToString()
