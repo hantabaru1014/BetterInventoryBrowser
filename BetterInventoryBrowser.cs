@@ -18,15 +18,12 @@ namespace BetterInventoryBrowser
         public static readonly ModConfigurationKey<List<RecordDirectoryInfo>> PinnedDirectories = 
             new ModConfigurationKey<List<RecordDirectoryInfo>>("PinnedDirectories", "PinnedDirectories", () => new List<RecordDirectoryInfo>(), true);
 
-        private static ModConfiguration? config;
-        private static List<RecordDirectoryInfo> _pinnedDirectories = new();
+        private static ModConfiguration? _config;
         private static RectTransform? _sidebarRect;
 
         public override void OnEngineInit()
         {
-            config = GetConfiguration();
-
-            _pinnedDirectories = config?.GetValue(PinnedDirectories) ?? new List<RecordDirectoryInfo>();
+            _config = GetConfiguration();
 
             Harmony harmony = new Harmony("dev.baru.neos.BetterInventoryBrowser");
             harmony.PatchAll();
@@ -59,7 +56,7 @@ namespace BetterInventoryBrowser
             vertLayout.ForceExpandHeight.Value = false;
             uiBuilder.Text("Pinned");
 
-            foreach (var pinnedDir in _pinnedDirectories)
+            foreach (var pinnedDir in _config?.GetValue(PinnedDirectories) ?? new List<RecordDirectoryInfo>())
             {
                 var itemBtn = uiBuilder.Button(pinnedDir.GetFriendlyPath());
                 itemBtn.Slot.GetComponent<LayoutElement>().PreferredHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE * 0.5f;
@@ -90,17 +87,18 @@ namespace BetterInventoryBrowser
         private static void TogglePinCurrentDirectory()
         {
             var currentDir = new RecordDirectoryInfo(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory);
-            if (_pinnedDirectories.Remove(currentDir))
+            var pinnedDirs = _config?.GetValue(PinnedDirectories) ?? new List<RecordDirectoryInfo>();
+            if (pinnedDirs.Remove(currentDir))
             {
                 Msg($"UnPinned {currentDir}");
             }
             else
             {
-                _pinnedDirectories.Add(currentDir);
-                config?.Set(PinnedDirectories, _pinnedDirectories);
+                pinnedDirs.Add(currentDir);
                 Msg($"AddPin: {currentDir}");
             }
-            
+            _config?.Set(PinnedDirectories, pinnedDirs);
+
             BuildSidebar();
         }
     }

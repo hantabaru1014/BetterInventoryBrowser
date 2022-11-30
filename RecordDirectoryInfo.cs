@@ -108,16 +108,16 @@ namespace BetterInventoryBrowser
 
         public string GetFriendlyPath()
         {
-            if (!Path.StartsWith("Inventory"))
+            if (!Path.StartsWith(InventoryBrowser.INVENTORY_ROOT))
             {
                 return Path;
             }
             var rootOwnerId = Directories is not null && Directories.Length > 0 ? Directories[0].OwnerId : OwnerId;
             if (rootOwnerId == Userspace.UserspaceWorld.LocalUser.UserID)
             {
-                return Path.Substring(9);
+                return Path.Substring(InventoryBrowser.INVENTORY_ROOT.Length);
             }
-            return CloudHelper.GetGroupName(rootOwnerId) + Path.Substring(9);
+            return CloudHelper.GetGroupName(rootOwnerId) + Path.Substring(InventoryBrowser.INVENTORY_ROOT.Length);
         }
     }
 }
