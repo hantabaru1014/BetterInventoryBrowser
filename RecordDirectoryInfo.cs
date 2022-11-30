@@ -108,7 +108,7 @@ namespace BetterInventoryBrowser
 
         public string GetFriendlyPath()
         {
-            if (!Path.StartsWith(InventoryBrowser.INVENTORY_ROOT))
+            if (!Path.StartsWith(InventoryBrowser.INVENTORY_ROOT) || !Path.Contains("\\"))
             {
                 return Path;
             }
@@ -118,6 +118,14 @@ namespace BetterInventoryBrowser
                 return Path.Substring(InventoryBrowser.INVENTORY_ROOT.Length);
             }
             return CloudHelper.GetGroupName(rootOwnerId) + Path.Substring(InventoryBrowser.INVENTORY_ROOT.Length);
+        }
+
+        public bool IsSubDirectory(RecordDirectoryInfo directoryInfo)
+        {
+            var splitPath = directoryInfo.Path.Split('\\');
+            if (splitPath.Length < 2) return false;
+            if (Path + "\\" + splitPath[splitPath.Length - 1] == directoryInfo.Path) return true;
+            return false;
         }
     }
 }
