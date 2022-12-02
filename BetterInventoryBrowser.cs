@@ -13,15 +13,18 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "1.0.0";
+        public override string Version => "0.1.0";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<List<RecordDirectoryInfo>> PinnedDirectoriesKey = 
-            new ModConfigurationKey<List<RecordDirectoryInfo>>("PinnedDirectories", "PinnedDirectories", () => new List<RecordDirectoryInfo>(), true);
+            new ModConfigurationKey<List<RecordDirectoryInfo>>("_PinnedDirectories", "PinnedDirectories", () => new List<RecordDirectoryInfo>(), true);
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<int> MaxRecentDirectoryCountKey =
-            new ModConfigurationKey<int>("MaxRecentDirectoryCount", "Max Recent Directory Count", () => 6);
+            new ModConfigurationKey<int>("MaxRecentDirectoryCount", "Max recent directory count", () => 6);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<bool> ShouldBeClearCacheKey = 
+            new ModConfigurationKey<bool>("ShouldBeClearCache", "If set to true the cache will be cleared", () => false);
 
         private static ModConfiguration? _config;
         private static RectTransform? _sidebarRect;
@@ -53,9 +56,10 @@ namespace BetterInventoryBrowser
 
             [HarmonyPostfix]
             [HarmonyPatch("SetPath")]
-            static void SetPath_Postfix(BrowserDialog __instance, SyncRef<Slot> ____pathRoot)
+            static void SetPath_Postfix(BrowserDialog __instance, SyncRef<Slot> ____pathRoot, List<string> pathChain)
             {
                 if (!(__instance is InventoryBrowser inventoryBrowser) || __instance.World != Userspace.UserspaceWorld) return;
+                if (pathChain is null) return;
                 ____pathRoot.Target[0].GetComponent<HorizontalLayout>().ForceExpandWidth.Value = false;
                 var uiBuilder = new UIBuilder(____pathRoot.Target[0]);
                 var currentDir = new RecordDirectoryInfo(inventoryBrowser.CurrentDirectory);
@@ -103,12 +107,13 @@ namespace BetterInventoryBrowser
         [HarmonyPatch(typeof(InventoryBrowser))]
         class InventoryBrowser_Patch
         {
-            [HarmonyPrefix]
+            [HarmonyPostfix]
             [HarmonyPatch(nameof(InventoryBrowser.Open))]
-            static void Open_Prefix(RecordDirectory directory)
+            static void Open_Postfix(RecordDirectory directory)
             {
+                if (directory is null) return;
                 var dirInfo = new RecordDirectoryInfo(directory);
-                if (dirInfo.Directories?.Length == 0) return;
+                if (!dirInfo.Path.Contains("\\")) return;
                 if (_recentDirectories.Count > 0 && _recentDirectories.Contains(dirInfo)) return;
                 if (_recentDirectories.Count > 0 && _recentDirectories[0].IsSubDirectory(dirInfo))
                 {
@@ -144,7 +149,12 @@ namespace BetterInventoryBrowser
                 itemBtn.Slot.GetComponent<LayoutElement>().MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE * 0.5f;
                 itemBtn.LocalPressed += async (IButton btn, ButtonEventData data) =>
                 {
-                    Msg($"Pressed item : {dir}");
+                    Msg($"Open : {dir}");
+                    if (_config?.GetValue(ShouldBeClearCacheKey) ?? false)
+                    {
+                        RecordDirectoryInfo.ClearCache();
+                        _config?.Set(ShouldBeClearCacheKey, false);
+                    }
                     var recordDir = await dir.ToRecordDirectory();
                     InventoryBrowser.CurrentUserspaceInventory.RunSynchronously(() =>
                     {
@@ -157,7 +167,6 @@ namespace BetterInventoryBrowser
         private static void BuildSidebar(RectTransform rectTransform)
         {
             rectTransform.Slot.DestroyChildren();
-            Msg("Build SideBar");
 
             var uiBuilder = new UIBuilder(rectTransform);
             var vertLayout = uiBuilder.VerticalLayout(8f, 0f, Alignment.TopCenter);

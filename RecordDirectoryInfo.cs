@@ -1,80 +1,47 @@
 ﻿using FrooxEngine;
-using HarmonyLib;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 
 namespace BetterInventoryBrowser
 {
     public class RecordDirectoryInfo : IEquatable<RecordDirectoryInfo>
     {
-        public string OwnerId { get; }
+        public string RootOwnerId { get; }
         public string Path { get; }
-        public string? Url { get; }
-        public RecordDirectoryInfo[]? Directories { get; }
+
+        private static Dictionary<RecordDirectoryInfo, RecordDirectory> _cache = new();
 
         [JsonConstructor]
-        public RecordDirectoryInfo(string ownerId, string path, string url, RecordDirectoryInfo[] directories)
+        public RecordDirectoryInfo(string rootOwnerId, string path)
         {
-            OwnerId = ownerId;
+            RootOwnerId = rootOwnerId;
             Path = path;
-            Url = url;
-            Directories = directories;
-        }
-
-        public RecordDirectoryInfo(string ownerId, string path, string? url = null)
-        {
-            OwnerId = ownerId;
-            Path = path;
-            Url = url;
-            Directories = null;
         }
 
         public RecordDirectoryInfo(RecordDirectory recordDirectory)
         {
-            OwnerId = recordDirectory.OwnerId;
+            RootOwnerId = recordDirectory.GetRootDirectory()?.OwnerId ?? "";
             Path = recordDirectory.Path;
-            Url = recordDirectory.IsLink ? recordDirectory.LinkRecord.URL.ToString() : null;
-            var reversedDirectories = new List<RecordDirectoryInfo>();
-            var currentDir = recordDirectory.ParentDirectory;
-            while (currentDir is not null)
-            {
-                // Directories内のRecordDirectoryInfoはDirectories=nullにする
-                reversedDirectories.Add(new RecordDirectoryInfo(currentDir.OwnerId, currentDir.Path, currentDir.IsLink ? currentDir.LinkRecord.URL.ToString() : null));
-                currentDir = currentDir.ParentDirectory;
-            }
-            Directories = reversedDirectories.AsEnumerable().Reverse().ToArray();
         }
 
-        private static MethodInfo setParentDirectoryMethod = AccessTools.PropertySetter(typeof(RecordDirectory), "ParentDirectory");
         public async Task<RecordDirectory> ToRecordDirectory()
         {
-            if (Directories is null || Directories.Length == 0)
+            if (_cache.TryGetValue(this, out var cachedRecordDir))
             {
-                return new RecordDirectory(OwnerId, Path, Engine.Current);
+                return cachedRecordDir;
             }
-            var previous = await Directories[0].ToRecordDirectory();
-            foreach (var d in Directories.Skip(1).Append(this))
-            {
-                if (d.Url is not null)
-                {
-                    if (Uri.TryCreate(d.Url, UriKind.Absolute, out var recordUri))
-                    {
-                        var record = (await Engine.Current.Cloud.GetRecordCached<Record>(recordUri))?.Entity;
-                        previous = new RecordDirectory(record, previous, Engine.Current);
-                    }
-                }
-                else
-                {
-                    var tmp = new RecordDirectory(d.OwnerId, d.Path, Engine.Current);
-                    setParentDirectoryMethod.Invoke(tmp, new object[] { previous });
-                    previous = tmp;
-                }
-            }
-            return previous;
+            var rootName = Path.Split('\\')[0];
+            var rootRecord = new RecordDirectory(RootOwnerId, rootName, Engine.Current);
+            var result = rootName != Path ? await rootRecord.GetSubdirectoryAtPath(Path.Substring(rootName.Length + 1)) : rootRecord;
+            _cache.Add(this, result);
+            return result;
+        }
+
+        public static void ClearCache()
+        {
+            _cache.Clear();
         }
 
         public override bool Equals(object obj)
@@ -82,28 +49,27 @@ namespace BetterInventoryBrowser
             if (obj is null) return false;
             if (obj is RecordDirectory rd)
             {
-                if (rd.IsLink) return OwnerId == rd.OwnerId && Path == rd.Path && Url == rd.LinkRecord.URL.ToString();
-                else return OwnerId == rd.OwnerId && Path == rd.Path;
+                return RootOwnerId == rd.GetRootDirectory().OwnerId && Path == rd.Path;
             }
             if (GetType() != obj.GetType()) return false;
             var c = (RecordDirectoryInfo)obj;
-            return OwnerId == c.OwnerId && Path == c.Path && Url == c.Url;
+            return RootOwnerId == c.RootOwnerId && Path == c.Path;
         }
 
         public override int GetHashCode()
         {
-            return OwnerId.GetHashCode() ^ Path.GetHashCode() ^ Url?.GetHashCode() ?? 0;
+            return RootOwnerId.GetHashCode() ^ Path.GetHashCode();
         }
 
         public bool Equals(RecordDirectoryInfo other)
         {
             if (other is null) return false;
-            return OwnerId == other.OwnerId && Path == other.Path && Url == other.Url;
+            return RootOwnerId == other.RootOwnerId && Path == other.Path;
         }
 
         public override string ToString()
         {
-            return $"{GetType().Name} OwnerId: {OwnerId}, Path: {Path}, Url: {Url}";
+            return $"{GetType().Name} RootOwnerId: {RootOwnerId}, Path: {Path}";
         }
 
         public string GetFriendlyPath()
@@ -112,19 +78,18 @@ namespace BetterInventoryBrowser
             {
                 return Path;
             }
-            var rootOwnerId = Directories is not null && Directories.Length > 0 ? Directories[0].OwnerId : OwnerId;
-            if (rootOwnerId == Userspace.UserspaceWorld.LocalUser.UserID)
+            if (RootOwnerId == Userspace.UserspaceWorld.LocalUser.UserID)
             {
                 return Path.Substring(InventoryBrowser.INVENTORY_ROOT.Length);
             }
-            return CloudHelper.GetGroupName(rootOwnerId) + Path.Substring(InventoryBrowser.INVENTORY_ROOT.Length);
+            return CloudHelper.GetGroupName(RootOwnerId) + Path.Substring(InventoryBrowser.INVENTORY_ROOT.Length);
         }
 
         public bool IsSubDirectory(RecordDirectoryInfo directoryInfo)
         {
             var splitPath = directoryInfo.Path.Split('\\');
             if (splitPath.Length < 2) return false;
-            if (Path + "\\" + splitPath[splitPath.Length - 1] == directoryInfo.Path) return true;
+            if (Path + "\\" + splitPath[splitPath.Length - 1] == directoryInfo.Path) return RootOwnerId == directoryInfo.RootOwnerId;
             return false;
         }
     }

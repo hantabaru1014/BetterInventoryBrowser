@@ -11,6 +11,7 @@ namespace BetterInventoryBrowser
 
         public static string GetGroupName(string groupId)
         {
+            if (string.IsNullOrEmpty(groupId)) return groupId;
             if (!_groupNames.ContainsKey(groupId))
             {
                 _groupNames.Clear();
