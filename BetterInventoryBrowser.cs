@@ -14,7 +14,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.2.0";
+        public override string Version => "0.2.1";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         [AutoRegisterConfigKey]
@@ -118,7 +118,11 @@ namespace BetterInventoryBrowser
                 }
                 var dirInfo = new RecordDirectoryInfo(directory);
                 if (!dirInfo.Path.Contains("\\")) return;
-                if (_recentDirectories.Count > 0 && _recentDirectories.Contains(dirInfo)) return;
+                if (_recentDirectories.Count > 0 && _recentDirectories.Contains(dirInfo))
+                {
+                    dirInfo.RegisterCache(directory);
+                    return;
+                }
                 if (_recentDirectories.Count > 0 && _recentDirectories[0].IsSubDirectory(dirInfo))
                 {
                     _recentDirectories[0].RemoveCache();
@@ -127,6 +131,7 @@ namespace BetterInventoryBrowser
                 }
                 else if ((_config?.GetValue(PinnedDirectoriesKey) ?? new List<RecordDirectoryInfo>()).Contains(dirInfo))
                 {
+                    dirInfo.RegisterCache(directory);
                     return;
                 }
                 else
