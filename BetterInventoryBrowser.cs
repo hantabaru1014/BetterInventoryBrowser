@@ -6,6 +6,7 @@ using FrooxEngine.UIX;
 using BaseX;
 using System.Linq;
 using System.Reflection.Emit;
+using System.Reflection;
 
 namespace BetterInventoryBrowser
 {
@@ -147,6 +148,7 @@ namespace BetterInventoryBrowser
             }
         }
 
+        private static readonly MethodInfo _generateContentMethod = AccessTools.Method(typeof(BrowserDialog), "GenerateContent");
         private static void BuildDirectoryButtons(Slot rootSlot, List<RecordDirectoryInfo> directories)
         {
             var uiBuilder = new UIBuilder(rootSlot);
@@ -160,6 +162,7 @@ namespace BetterInventoryBrowser
                 itemBtn.LocalPressed += async (IButton btn, ButtonEventData data) =>
                 {
                     Msg($"Open : {dir}");
+                    _generateContentMethod.Invoke(InventoryBrowser.CurrentUserspaceInventory, new object[] { SlideSwapRegion.Slide.Right, true });
                     var recordDir = await dir.ToRecordDirectory();
                     InventoryBrowser.CurrentUserspaceInventory.RunSynchronously(() =>
                     {
