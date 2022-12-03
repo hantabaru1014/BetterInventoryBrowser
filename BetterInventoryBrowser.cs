@@ -13,7 +13,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.1.0";
+        public override string Version => "0.2.0";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         [AutoRegisterConfigKey]
@@ -111,7 +111,12 @@ namespace BetterInventoryBrowser
             [HarmonyPatch(nameof(InventoryBrowser.Open))]
             static void Open_Postfix(RecordDirectory directory)
             {
-                if (directory is null) return;
+                if (directory is null)
+                {
+                    // ShowInventoryOwnersからnullで呼ばれたタイミングではキャッシュクリアする
+                    RecordDirectoryInfo.ClearCache();
+                    return;
+                }
                 var dirInfo = new RecordDirectoryInfo(directory);
                 if (!dirInfo.Path.Contains("\\")) return;
                 if (_recentDirectories.Count > 0 && _recentDirectories.Contains(dirInfo)) return;
