@@ -22,9 +22,6 @@ namespace BetterInventoryBrowser
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<int> MaxRecentDirectoryCountKey =
             new ModConfigurationKey<int>("MaxRecentDirectoryCount", "Max recent directory count", () => 6);
-        [AutoRegisterConfigKey]
-        public static readonly ModConfigurationKey<bool> ShouldBeClearCacheKey = 
-            new ModConfigurationKey<bool>("ShouldBeClearCache", "If set to true the cache will be cleared", () => false);
 
         private static ModConfiguration? _config;
         private static RectTransform? _sidebarRect;
@@ -115,6 +112,7 @@ namespace BetterInventoryBrowser
                 {
                     // ShowInventoryOwnersからnullで呼ばれたタイミングではキャッシュクリアする
                     RecordDirectoryInfo.ClearCache();
+                    Msg("Cleared cache");
                     return;
                 }
                 var dirInfo = new RecordDirectoryInfo(directory);
@@ -122,7 +120,9 @@ namespace BetterInventoryBrowser
                 if (_recentDirectories.Count > 0 && _recentDirectories.Contains(dirInfo)) return;
                 if (_recentDirectories.Count > 0 && _recentDirectories[0].IsSubDirectory(dirInfo))
                 {
+                    _recentDirectories[0].RemoveCache();
                     _recentDirectories[0] = dirInfo;
+                    dirInfo.RegisterCache(directory);
                 }
                 else if ((_config?.GetValue(PinnedDirectoriesKey) ?? new List<RecordDirectoryInfo>()).Contains(dirInfo))
                 {
@@ -131,11 +131,16 @@ namespace BetterInventoryBrowser
                 else
                 {
                     _recentDirectories.Insert(0, dirInfo);
+                    dirInfo.RegisterCache(directory);
                 }
 
                 var maxCount = _config?.GetValue(MaxRecentDirectoryCountKey) ?? 6;
                 if (_recentDirectories.Count > maxCount)
                 {
+                    foreach (var dirInfoToRemove in _recentDirectories.GetRange(maxCount, _recentDirectories.Count - maxCount))
+                    {
+                        dirInfoToRemove.RemoveCache();
+                    }
                     _recentDirectories.RemoveRange(maxCount, _recentDirectories.Count - maxCount);
                 }
                 BuildSidebar();
@@ -155,11 +160,6 @@ namespace BetterInventoryBrowser
                 itemBtn.LocalPressed += async (IButton btn, ButtonEventData data) =>
                 {
                     Msg($"Open : {dir}");
-                    if (_config?.GetValue(ShouldBeClearCacheKey) ?? false)
-                    {
-                        RecordDirectoryInfo.ClearCache();
-                        _config?.Set(ShouldBeClearCacheKey, false);
-                    }
                     var recordDir = await dir.ToRecordDirectory();
                     InventoryBrowser.CurrentUserspaceInventory.RunSynchronously(() =>
                     {

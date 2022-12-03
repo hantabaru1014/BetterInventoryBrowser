@@ -44,12 +44,29 @@ namespace BetterInventoryBrowser
             _cache.Clear();
         }
 
+        public bool RemoveCache()
+        {
+            return _cache.Remove(this);
+        }
+
+        public void RegisterCache(RecordDirectory recordDirectory)
+        {
+            if (_cache.ContainsKey(this))
+            {
+                _cache[this] = recordDirectory;
+            }
+            else
+            {
+                _cache.Add(this, recordDirectory);
+            }
+        }
+
         public override bool Equals(object obj)
         {
             if (obj is null) return false;
             if (obj is RecordDirectory rd)
             {
-                return RootOwnerId == rd.GetRootDirectory().OwnerId && Path == rd.Path;
+                return RootOwnerId == rd.GetRootDirectory()?.OwnerId && Path == rd.Path;
             }
             if (GetType() != obj.GetType()) return false;
             var c = (RecordDirectoryInfo)obj;
