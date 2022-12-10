@@ -4,9 +4,11 @@ using NeosModLoader;
 using FrooxEngine;
 using FrooxEngine.UIX;
 using BaseX;
+using CodeX;
 using System.Linq;
 using System.Reflection.Emit;
 using System.Reflection;
+using System;
 
 namespace BetterInventoryBrowser
 {
@@ -14,7 +16,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.2.2";
+        public override string Version => "0.3.0";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         [AutoRegisterConfigKey]
@@ -23,10 +25,14 @@ namespace BetterInventoryBrowser
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<int> MaxRecentDirectoryCountKey =
             new ModConfigurationKey<int>("MaxRecentDirectoryCount", "Max recent directory count", () => 6);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<bool> StripRtfTagsOnSortKey = new ModConfigurationKey<bool>("StripRtfTagsOnSort", "Strip RTF tags on sort", () => true);
 
         private static ModConfiguration? _config;
         private static RectTransform? _sidebarRect;
         private static List<RecordDirectoryInfo> _recentDirectories = new List<RecordDirectoryInfo>();
+        private static RectTransform? _sortButtonsRoot;
+        private static SortMethod _currentSortMethod = SortMethod.Default;
 
         public override void OnEngineInit()
         {
@@ -41,7 +47,7 @@ namespace BetterInventoryBrowser
         {
             [HarmonyPostfix]
             [HarmonyPatch("OnAttach")]
-            static void OnAttach_Postfix(BrowserDialog __instance, SyncRef<SlideSwapRegion> ____swapper)
+            static void OnAttach_Postfix(BrowserDialog __instance, SyncRef<SlideSwapRegion> ____swapper, SyncRef<Slot> ____buttonsRoot)
             {
                 if (!(__instance is InventoryBrowser) || __instance.World != Userspace.UserspaceWorld) return;
                 RectTransform sidebarRt, contentRt;
@@ -50,6 +56,15 @@ namespace BetterInventoryBrowser
                 ____swapper.Target = contentRt.Slot.AttachComponent<SlideSwapRegion>(true, null);
                 _sidebarRect = sidebarRt;
                 BuildSidebar(sidebarRt);
+
+                var header2 = ____buttonsRoot.Target.Parent;
+                header2.DestroyChildren();
+                var uiBuilder2 = new UIBuilder(header2);
+                uiBuilder2.SplitHorizontally(0.3f, out var leftRt, out var rightRt);
+                var buttonsBuilder = new UIBuilder(rightRt);
+                buttonsBuilder.HorizontalLayout(0f, 0f, Alignment.MiddleRight).ForceExpandWidth.Value = false;
+                ____buttonsRoot.Target = buttonsBuilder.Root;
+                BuildSortButtons(leftRt);
             }
 
             [HarmonyPostfix]
@@ -154,6 +169,96 @@ namespace BetterInventoryBrowser
                 }
                 BuildSidebar();
             }
+
+            [HarmonyTranspiler]
+            [HarmonyPatch("UpdateDirectoryItems")]
+            static IEnumerable<CodeInstruction> UpdateDirectoryItems_Transpiler(IEnumerable<CodeInstruction> instructions)
+            {
+                var getSubdirMethod = AccessTools.PropertyGetter(typeof(RecordDirectory), "Subdirectories");
+                var getRecordsMethod = AccessTools.PropertyGetter(typeof(RecordDirectory), "Records");
+                foreach (var code in instructions)
+                {
+                    yield return code;
+                    if (code.Calls(getSubdirMethod))
+                    {
+                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortDirectories)));
+                    }
+                    else if (code.Calls(getRecordsMethod))
+                    {
+                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortRecords)));
+                    }
+                }
+            }
+
+            static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories)
+            {
+                switch (_currentSortMethod)
+                {
+                    case SortMethod.Updated:
+                        return directories.OrderBy(d => d.EntryRecord.LastModificationTime).ToList();
+                    case SortMethod.Created:
+                        return directories.OrderBy(d => d.EntryRecord.CreationTime).ToList();
+                    case SortMethod.Name:
+                        var stripRtf = _config?.GetValue(StripRtfTagsOnSortKey) == true;
+                        return directories.OrderBy(d => d.Name.Contains("<") && stripRtf ? new StringRenderTree(d.Name).GetRawString() : d.Name).ToList();
+                    case SortMethod.Default:
+                    default:
+                        return directories;
+                }
+            }
+
+            static IReadOnlyList<Record> SortRecords(IReadOnlyList<Record> records)
+            {
+                switch (_currentSortMethod)
+                {
+                    case SortMethod.Updated:
+                        return records.OrderBy(r => r.LastModificationTime).ToList();
+                    case SortMethod.Created:
+                        return records.OrderBy(r => r.CreationTime).ToList();
+                    case SortMethod.Name:
+                        var stripRtf = _config?.GetValue(StripRtfTagsOnSortKey) == true;
+                        return records.OrderBy(r => r.Name.Contains("<") && stripRtf ? new StringRenderTree(r.Name).GetRawString() : r.Name).ToList();
+                    case SortMethod.Default:
+                    default:
+                        return records;
+                }
+            }
+        }
+
+        public enum SortMethod
+        {
+            Default, Name, Updated, Created
+        }
+
+        private static void BuildSortButtons(RectTransform rootRect)
+        {
+            _sortButtonsRoot = rootRect;
+            rootRect.Slot.DestroyChildren();
+            var uiBuilder = new UIBuilder(rootRect);
+            uiBuilder.HorizontalLayout(4f, 4f, Alignment.MiddleLeft);
+            uiBuilder.Text("Sort:");
+            uiBuilder.FitContent(SizeFit.MinSize, SizeFit.Disabled);
+            foreach (SortMethod sortMethod in Enum.GetValues(typeof(SortMethod)))
+            {
+                var btn = uiBuilder.Button(sortMethod.ToString());
+                btn.LocalPressed += (IButton btn, ButtonEventData data) =>
+                {
+                    UpdateSortMethod(sortMethod);
+                };
+                btn.Enabled = _currentSortMethod != sortMethod;
+            }
+        }
+        private static void BuildSortButtons()
+        {
+            if (_sortButtonsRoot is null) return;
+            BuildSortButtons(_sortButtonsRoot);
+        }
+
+        private static void UpdateSortMethod(SortMethod sortMethod)
+        {
+            _currentSortMethod = sortMethod;
+            InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
+            BuildSortButtons();
         }
 
         private static readonly MethodInfo _generateContentMethod = AccessTools.Method(typeof(BrowserDialog), "GenerateContent");

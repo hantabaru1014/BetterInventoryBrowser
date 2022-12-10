@@ -12,7 +12,7 @@
     <CopyToMods Condition="'$(CopyToMods)'==''">true</CopyToMods>
     <DebugSymbols Condition="'$(Configuration)'=='Release'">false</DebugSymbols>
     <DebugType Condition="'$(Configuration)'=='Release'">None</DebugType>
-    <Version>0.2.2</Version>
+    <Version>0.3.0</Version>
     <Authors>hantabaru1014</Authors>
   </PropertyGroup>
 
@@ -30,6 +30,9 @@
     </Reference>
     <Reference Include="BaseX">
       <HintPath>$(NeosPath)Neos_Data\Managed\BaseX.dll</HintPath>
+    </Reference>
+    <Reference Include="CodeX">
+      <HintPath>$(NeosPath)Neos_Data\Managed\CodeX.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(NeosPath)Neos_Data\Managed\Newtonsoft.Json.dll</HintPath>
