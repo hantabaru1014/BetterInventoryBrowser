@@ -40,6 +40,7 @@ namespace BetterInventoryBrowser
 
             Harmony harmony = new Harmony("dev.baru.neos.BetterInventoryBrowser");
             harmony.PatchAll();
+            RecordDirectory_GetSubdirectoryAtPath_Patch.Patch(harmony);
         }
 
         [HarmonyPatch(typeof(BrowserDialog))]
@@ -182,10 +183,12 @@ namespace BetterInventoryBrowser
                     if (code.Calls(getSubdirMethod))
                     {
                         yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortDirectories)));
+                        Msg("Patched InventoryBrowser.UpdateDirectoryItems for directories");
                     }
                     else if (code.Calls(getRecordsMethod))
                     {
                         yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortRecords)));
+                        Msg("Patched InventoryBrowser.UpdateDirectoryItems for records");
                     }
                 }
             }
@@ -222,6 +225,46 @@ namespace BetterInventoryBrowser
                     default:
                         return records;
                 }
+            }
+        }
+
+        class RecordDirectory_GetSubdirectoryAtPath_Patch
+        {
+            static readonly Type _targetInternalClass = typeof(RecordDirectory).GetNestedType("<GetSubdirectoryAtPath>d__75", BindingFlags.Instance | BindingFlags.NonPublic);
+
+            public static void Patch(Harmony harmony)
+            {
+                var targetMethod = AccessTools.Method(_targetInternalClass, "MoveNext");
+                var transpiler = AccessTools.Method(typeof(RecordDirectory_GetSubdirectoryAtPath_Patch), nameof(Transpiler));
+                harmony.Patch(targetMethod, transpiler: new HarmonyMethod(transpiler));
+            }
+
+            static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+            {
+                var lastLdfldIndex = -1;
+                var codes = instructions.ToList();
+                for (var i = 0; i < codes.Count; i++)
+                {
+                    if (codes[i].opcode == OpCodes.Ldfld)
+                    {
+                        lastLdfldIndex = i;
+                    }
+                    if (lastLdfldIndex != -1 && codes[i].opcode == OpCodes.Stloc_3)
+                    {
+                        codes.Insert(lastLdfldIndex + 1, new CodeInstruction(OpCodes.Call,
+                            AccessTools.Method(typeof(RecordDirectory_GetSubdirectoryAtPath_Patch), nameof(SanitizePath))));
+                        Msg("Patched RecordDirectory.GetSubdirectoryAtPath");
+                        break;
+                    }
+                }
+                return codes.AsEnumerable();
+            }
+
+            static string SanitizePath(string path)
+            {
+                // HACK: RTFタグの閉じタグにあるスラッシュをパス区切りと判別するのが
+                // 面倒なのでスラッシュでのパス区切りをひとまずサポートしない
+                return path.Replace('/', 'x');
             }
         }
 

@@ -23,7 +23,7 @@ namespace BetterInventoryBrowser
         public RecordDirectoryInfo(RecordDirectory recordDirectory)
         {
             RootOwnerId = recordDirectory.GetRootDirectory()?.OwnerId ?? "";
-            Path = recordDirectory.Path;
+            Path = recordDirectory.GetRelativePath(true);
         }
 
         public async Task<RecordDirectory> ToRecordDirectory()
@@ -66,7 +66,7 @@ namespace BetterInventoryBrowser
             if (obj is null) return false;
             if (obj is RecordDirectory rd)
             {
-                return RootOwnerId == rd.GetRootDirectory()?.OwnerId && Path == rd.Path;
+                return RootOwnerId == rd.GetRootDirectory()?.OwnerId && Path == rd.GetRelativePath(true);
             }
             if (GetType() != obj.GetType()) return false;
             var c = (RecordDirectoryInfo)obj;
