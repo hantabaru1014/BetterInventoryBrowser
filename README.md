@@ -3,10 +3,11 @@
 A [NeosModLoader](https://github.com/zkxs/NeosModLoader) mod for [Neos VR](https://neos.com/) that UI tweaks for InventoryBrowser.
 
 ## Current features
-![ss-1669821270](https://user-images.githubusercontent.com/16133291/205326655-5cb27537-3ad5-44a0-8915-4477c359b7de.png)
+![ss_BetterInventoryBrowser](https://user-images.githubusercontent.com/16133291/206857834-aefef7ae-64e1-43e3-acc5-a1382da9ab14.png)
 
 - Pin directory to sidebar
 - Show recently opened directories in sidebar
+- Sort by (Default/Name/Updated/Created)
 
 ## Installation
 1. Install [NeosModLoader](https://github.com/zkxs/NeosModLoader).
