@@ -26,7 +26,7 @@ namespace BetterInventoryBrowser
         public static readonly ModConfigurationKey<int> MaxRecentDirectoryCountKey =
             new ModConfigurationKey<int>("MaxRecentDirectoryCount", "Max recent directory count", () => 6);
         [AutoRegisterConfigKey]
-        public static readonly ModConfigurationKey<bool> StripRtfTagsOnSortKey = new ModConfigurationKey<bool>("StripRtfTagsOnSort", "Strip RTF tags on sort", () => true);
+        public static readonly ModConfigurationKey<bool> StripRtfTagsOnSortKey = new ModConfigurationKey<bool>("StripRtfTagsOnSort", "Strip RTF tags on sort by name", () => true);
 
         private static ModConfiguration? _config;
         private static RectTransform? _sidebarRect;
