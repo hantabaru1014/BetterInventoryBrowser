@@ -16,7 +16,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.3.0";
+        public override string Version => "0.4.0";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         [AutoRegisterConfigKey]
@@ -26,7 +26,11 @@ namespace BetterInventoryBrowser
         public static readonly ModConfigurationKey<int> MaxRecentDirectoryCountKey =
             new ModConfigurationKey<int>("MaxRecentDirectoryCount", "Max recent directory count", () => 6);
         [AutoRegisterConfigKey]
-        public static readonly ModConfigurationKey<bool> StripRtfTagsOnSortKey = new ModConfigurationKey<bool>("StripRtfTagsOnSort", "Strip RTF tags on sort by name", () => true);
+        public static readonly ModConfigurationKey<bool> StripRtfTagsOnSortKey = 
+            new ModConfigurationKey<bool>("StripRtfTagsOnSort", "Strip RTF tags on sort by name", () => true);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<bool> ForceSortByDefaultKey = 
+            new ModConfigurationKey<bool>("ForceSortByDefault", "Sort folders by name and files by update by \"Default\"", () => false);
 
         private static ModConfiguration? _config;
         private static RectTransform? _sidebarRect;
@@ -201,10 +205,18 @@ namespace BetterInventoryBrowser
                         return directories.OrderBy(d => d.EntryRecord.LastModificationTime).ToList();
                     case SortMethod.Created:
                         return directories.OrderBy(d => d.EntryRecord.CreationTime).ToList();
-                    case SortMethod.Name:
-                        var stripRtf = _config?.GetValue(StripRtfTagsOnSortKey) == true;
-                        return directories.OrderBy(d => d.Name.Contains("<") && stripRtf ? new StringRenderTree(d.Name).GetRawString() : d.Name).ToList();
                     case SortMethod.Default:
+                        if (_config?.GetValue(ForceSortByDefaultKey) ?? false)
+                        {
+                            goto case SortMethod.Name;
+                        }
+                        else
+                        {
+                            goto default;
+                        }
+                    case SortMethod.Name:
+                        return directories.OrderBy(d => d.Name.Contains("<") && 
+                            (_config?.GetValue(StripRtfTagsOnSortKey) ?? false) ? new StringRenderTree(d.Name).GetRawString() : d.Name).ToList();
                     default:
                         return directories;
                 }
@@ -214,14 +226,22 @@ namespace BetterInventoryBrowser
             {
                 switch (_currentSortMethod)
                 {
+                    case SortMethod.Default:
+                        if (_config?.GetValue(ForceSortByDefaultKey) ?? false)
+                        {
+                            goto case SortMethod.Updated;
+                        }
+                        else
+                        {
+                            goto default;
+                        }
                     case SortMethod.Updated:
                         return records.OrderBy(r => r.LastModificationTime).ToList();
                     case SortMethod.Created:
                         return records.OrderBy(r => r.CreationTime).ToList();
                     case SortMethod.Name:
-                        var stripRtf = _config?.GetValue(StripRtfTagsOnSortKey) == true;
-                        return records.OrderBy(r => r.Name.Contains("<") && stripRtf ? new StringRenderTree(r.Name).GetRawString() : r.Name).ToList();
-                    case SortMethod.Default:
+                        return records.OrderBy(r => r.Name.Contains("<") && 
+                            (_config?.GetValue(StripRtfTagsOnSortKey) ?? false) ? new StringRenderTree(r.Name).GetRawString() : r.Name).ToList();
                     default:
                         return records;
                 }
