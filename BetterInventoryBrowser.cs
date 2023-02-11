@@ -31,6 +31,9 @@ namespace BetterInventoryBrowser
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<bool> ForceSortByDefaultKey = 
             new ModConfigurationKey<bool>("ForceSortByDefault", "Sort folders by name and files by update by \"Default\"", () => false);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<float> SidebarWidthKey =
+            new ModConfigurationKey<float>("SidebarWidth", "Width of Sidebar", () => 180f);
 
         private static ModConfiguration? _config;
         private static RectTransform? _sidebarRect;
@@ -41,10 +44,24 @@ namespace BetterInventoryBrowser
         public override void OnEngineInit()
         {
             _config = GetConfiguration();
+            if (_config == null)
+            {
+                Error("Config Not Found!!");
+                return;
+            }
+            _config.OnThisConfigurationChanged += OnModConfigurationChanged;
 
             Harmony harmony = new Harmony("dev.baru.neos.BetterInventoryBrowser");
             harmony.PatchAll();
             RecordDirectory_GetSubdirectoryAtPath_Patch.Patch(harmony);
+        }
+
+        private void OnModConfigurationChanged(ConfigurationChangedEvent configEvent)
+        {
+            if (configEvent.Key == SidebarWidthKey && _sidebarRect != null)
+            {
+                _sidebarRect.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
+            }
         }
 
         [HarmonyPatch(typeof(BrowserDialog))]
@@ -56,9 +73,37 @@ namespace BetterInventoryBrowser
             {
                 if (!(__instance is InventoryBrowser) || __instance.World != Userspace.UserspaceWorld) return;
                 RectTransform sidebarRt, contentRt;
-                var uiBuilder = new UIBuilder(____swapper.Target.Slot);
-                uiBuilder.SplitHorizontally(0.125f, out sidebarRt, out contentRt);
+                var originalSwapperSlot = ____swapper.Target.Slot;
+                var uiBuilder = new UIBuilder(originalSwapperSlot);
+                uiBuilder.HorizontalLayout(0, 0, Alignment.MiddleCenter).ForceExpandWidth.Value = false;
+
+                // Toggle Sidebar Button
+                uiBuilder.Panel().Slot.GetComponent<LayoutElement>().PreferredWidth.Value = 0;
+                var toggleButton = uiBuilder.Button("<<");
+                toggleButton.RectTransform.AnchorMin.Value = new float2(0, 0.8f);
+                toggleButton.RectTransform.OffsetMin.Value = new float2(-25, 0);
+                toggleButton.RectTransform.OffsetMax.Value = new float2(-5, -5);
+                toggleButton.LocalPressed += (IButton button, ButtonEventData eventData) =>
+                {
+                    if (_sidebarRect == null) return;
+                    var nextActive = !_sidebarRect.Slot.ActiveSelf;
+                    _sidebarRect.Slot.ActiveSelf = nextActive;
+                    toggleButton.Slot.GetComponentInChildren<Text>().Content.Value = nextActive ? "<<" : ">>";
+                };
+                uiBuilder.NestOut();
+                
+                // Sidebar
+                sidebarRt = uiBuilder.Panel();
+                sidebarRt.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
+                uiBuilder.NestOut();
+
+                // Main Area
+                contentRt = uiBuilder.Panel();
+                contentRt.Slot.GetComponent<LayoutElement>().FlexibleWidth.Value = 1f;
+                uiBuilder.NestOut();
+
                 ____swapper.Target = contentRt.Slot.AttachComponent<SlideSwapRegion>(true, null);
+                originalSwapperSlot.RemoveAllComponents(component => component.WorkerType != typeof(RectTransform));
                 _sidebarRect = sidebarRt;
                 BuildSidebar(sidebarRt);
 
