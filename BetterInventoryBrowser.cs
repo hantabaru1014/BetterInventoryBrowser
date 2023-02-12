@@ -61,6 +61,7 @@ namespace BetterInventoryBrowser
             if (configEvent.Key == SidebarWidthKey && _sidebarRect != null)
             {
                 _sidebarRect.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
+                ReGridLayout();
             }
         }
 
@@ -89,6 +90,7 @@ namespace BetterInventoryBrowser
                     var nextActive = !_sidebarRect.Slot.ActiveSelf;
                     _sidebarRect.Slot.ActiveSelf = nextActive;
                     toggleButton.Slot.GetComponentInChildren<Text>().Content.Value = nextActive ? "<<" : ">>";
+                    ReGridLayout();
                 };
                 uiBuilder.NestOut();
                 
@@ -442,6 +444,18 @@ namespace BetterInventoryBrowser
         {
             var pinnedDirs = _config?.GetValue(PinnedDirectoriesKey) ?? new List<RecordDirectoryInfo>();
             button.Slot.GetComponentInChildren<Text>().Content.Value = pinnedDirs.Contains(directory) ? "★" : "☆";
+        }
+
+        private static void ReGridLayout()
+        {
+            var layoutRootSlot = ((SyncRef<SlideSwapRegion>)AccessTools.Field(typeof(BrowserDialog), "_swapper")
+                .GetValue(InventoryBrowser.CurrentUserspaceInventory)).Target
+                .Slot.GetComponentInChildren<GridLayout>().Slot;
+            var dummy = layoutRootSlot.AddSlot("dummy", false);
+            layoutRootSlot.RunInUpdates(3, () =>
+            {
+                dummy.Destroy();
+            });
         }
     }
 }
