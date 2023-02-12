@@ -23,6 +23,13 @@ namespace BetterInventoryBrowser
         public static readonly ModConfigurationKey<List<RecordDirectoryInfo>> PinnedDirectoriesKey = 
             new ModConfigurationKey<List<RecordDirectoryInfo>>("_PinnedDirectories", "PinnedDirectories", () => new List<RecordDirectoryInfo>(), true);
         [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<bool> IsOpenSidebarKey =
+            new ModConfigurationKey<bool>("_IsOpenSidebar", "IsOpenSidebar", () => true, true);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<SortMethod> SelectedSortMethodKey =
+            new ModConfigurationKey<SortMethod>("_SelectedSortMethod", "SelectedSortMethod", () => SortMethod.Default, true);
+
+        [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<int> MaxRecentDirectoryCountKey =
             new ModConfigurationKey<int>("MaxRecentDirectoryCount", "Max recent directory count", () => 6);
         [AutoRegisterConfigKey]
@@ -39,7 +46,6 @@ namespace BetterInventoryBrowser
         private static RectTransform? _sidebarRect;
         private static List<RecordDirectoryInfo> _recentDirectories = new List<RecordDirectoryInfo>();
         private static RectTransform? _sortButtonsRoot;
-        private static SortMethod _currentSortMethod = SortMethod.Default;
 
         public override void OnEngineInit()
         {
@@ -76,11 +82,12 @@ namespace BetterInventoryBrowser
                 RectTransform sidebarRt, contentRt;
                 var originalSwapperSlot = ____swapper.Target.Slot;
                 var uiBuilder = new UIBuilder(originalSwapperSlot);
-                uiBuilder.HorizontalLayout(0, 0, Alignment.MiddleCenter).ForceExpandWidth.Value = false;
+                uiBuilder.HorizontalLayout(0, 0, Alignment.TopLeft).ForceExpandWidth.Value = false;
 
                 // Toggle Sidebar Button
                 uiBuilder.Panel().Slot.GetComponent<LayoutElement>().PreferredWidth.Value = 0;
-                var toggleButton = uiBuilder.Button("<<");
+                var isOpenSidebar = _config?.GetValue(IsOpenSidebarKey) ?? true;
+                var toggleButton = uiBuilder.Button(isOpenSidebar ? "<<" : ">>");
                 toggleButton.RectTransform.AnchorMin.Value = new float2(0, 0.8f);
                 toggleButton.RectTransform.OffsetMin.Value = new float2(-25, 0);
                 toggleButton.RectTransform.OffsetMax.Value = new float2(-5, -5);
@@ -91,12 +98,16 @@ namespace BetterInventoryBrowser
                     _sidebarRect.Slot.ActiveSelf = nextActive;
                     toggleButton.Slot.GetComponentInChildren<Text>().Content.Value = nextActive ? "<<" : ">>";
                     ReGridLayout();
+                    _config?.Set(IsOpenSidebarKey, nextActive);
                 };
                 uiBuilder.NestOut();
                 
                 // Sidebar
                 sidebarRt = uiBuilder.Panel();
                 sidebarRt.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
+                _sidebarRect = sidebarRt;
+                BuildSidebar(sidebarRt);
+                sidebarRt.Slot.ActiveSelf = isOpenSidebar;
                 uiBuilder.NestOut();
 
                 // Main Area
@@ -106,8 +117,6 @@ namespace BetterInventoryBrowser
 
                 ____swapper.Target = contentRt.Slot.AttachComponent<SlideSwapRegion>(true, null);
                 originalSwapperSlot.RemoveAllComponents(component => component.WorkerType != typeof(RectTransform));
-                _sidebarRect = sidebarRt;
-                BuildSidebar(sidebarRt);
 
                 var header2 = ____buttonsRoot.Target.Parent;
                 header2.DestroyChildren();
@@ -246,7 +255,7 @@ namespace BetterInventoryBrowser
 
             static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories)
             {
-                switch (_currentSortMethod)
+                switch (_config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default)
                 {
                     case SortMethod.Updated:
                         return directories.OrderBy(d => d.EntryRecord.LastModificationTime).ToList();
@@ -271,7 +280,7 @@ namespace BetterInventoryBrowser
 
             static IReadOnlyList<Record> SortRecords(IReadOnlyList<Record> records)
             {
-                switch (_currentSortMethod)
+                switch (_config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default)
                 {
                     case SortMethod.Default:
                         if (_config?.GetValue(ForceSortByDefaultKey) ?? false)
@@ -348,6 +357,7 @@ namespace BetterInventoryBrowser
             uiBuilder.HorizontalLayout(4f, 4f, Alignment.MiddleLeft);
             uiBuilder.Text("Sort:");
             uiBuilder.FitContent(SizeFit.MinSize, SizeFit.Disabled);
+            var selectedMethod = _config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default;
             foreach (SortMethod sortMethod in Enum.GetValues(typeof(SortMethod)))
             {
                 var btn = uiBuilder.Button(sortMethod.ToString());
@@ -355,9 +365,10 @@ namespace BetterInventoryBrowser
                 {
                     UpdateSortMethod(sortMethod);
                 };
-                btn.Enabled = _currentSortMethod != sortMethod;
+                btn.Enabled = selectedMethod != sortMethod;
             }
         }
+
         private static void BuildSortButtons()
         {
             if (_sortButtonsRoot is null) return;
@@ -366,7 +377,7 @@ namespace BetterInventoryBrowser
 
         private static void UpdateSortMethod(SortMethod sortMethod)
         {
-            _currentSortMethod = sortMethod;
+            _config?.Set(SelectedSortMethodKey, sortMethod);
             InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
             BuildSortButtons();
         }
