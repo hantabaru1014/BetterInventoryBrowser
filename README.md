@@ -5,9 +5,13 @@ A [NeosModLoader](https://github.com/zkxs/NeosModLoader) mod for [Neos VR](https
 ## Current features
 ![ss_BetterInventoryBrowser](https://user-images.githubusercontent.com/16133291/206857834-aefef7ae-64e1-43e3-acc5-a1382da9ab14.png)
 
-- Pin directory to sidebar
-- Show recently opened directories in sidebar
+- Added a sidebar to the left of the inventory
+    - Pin directory to the sidebar
+    - Show recently opened directories in the sidebar
+    - The sidebar can be shown/hide and width can be set on settings
 - Sort by (Default/Name/Updated/Created)
+    - Strip RTF tags on sort by name (Toggleable in settings)
+    - Sort folders by name and items by update on "Default" (Toggleable in settings)
 
 ## Installation
 1. Install [NeosModLoader](https://github.com/zkxs/NeosModLoader).
