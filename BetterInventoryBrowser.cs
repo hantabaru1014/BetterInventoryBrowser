@@ -37,7 +37,7 @@ namespace BetterInventoryBrowser
             new ModConfigurationKey<bool>("StripRtfTagsOnSort", "Strip RTF tags on sort by name", () => true);
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<bool> ForceSortByDefaultKey = 
-            new ModConfigurationKey<bool>("ForceSortByDefault", "Sort folders by name and files by update by \"Default\"", () => false);
+            new ModConfigurationKey<bool>("ForceSortByDefault", "Sort folders by name and items by update on \"Default\"", () => false);
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<float> SidebarWidthKey =
             new ModConfigurationKey<float>("SidebarWidth", "Width of Sidebar", () => 180f);
