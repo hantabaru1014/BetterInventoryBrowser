@@ -16,7 +16,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.4.0";
+        public override string Version => "0.4.1";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         [AutoRegisterConfigKey]
@@ -78,7 +78,7 @@ namespace BetterInventoryBrowser
             [HarmonyPatch("OnAttach")]
             static void OnAttach_Postfix(BrowserDialog __instance, SyncRef<SlideSwapRegion> ____swapper, SyncRef<Slot> ____buttonsRoot)
             {
-                if (!(__instance is InventoryBrowser) || __instance.World != Userspace.UserspaceWorld) return;
+                if (!(__instance is InventoryBrowser) || __instance.World != Userspace.UserspaceWorld || !IsPatchTarget(__instance)) return;
                 RectTransform sidebarRt, contentRt;
                 var originalSwapperSlot = ____swapper.Target.Slot;
                 var uiBuilder = new UIBuilder(originalSwapperSlot);
@@ -132,7 +132,7 @@ namespace BetterInventoryBrowser
             [HarmonyPatch("SetPath")]
             static void SetPath_Postfix(BrowserDialog __instance, SyncRef<Slot> ____pathRoot, List<string> pathChain)
             {
-                if (!(__instance is InventoryBrowser inventoryBrowser) || __instance.World != Userspace.UserspaceWorld) return;
+                if (!(__instance is InventoryBrowser inventoryBrowser) || __instance.World != Userspace.UserspaceWorld || !IsPatchTarget(__instance)) return;
                 if (pathChain is null) return;
                 ____pathRoot.Target[0].GetComponent<HorizontalLayout>().ForceExpandWidth.Value = false;
                 var uiBuilder = new UIBuilder(____pathRoot.Target[0]);
@@ -183,8 +183,9 @@ namespace BetterInventoryBrowser
         {
             [HarmonyPostfix]
             [HarmonyPatch(nameof(InventoryBrowser.Open))]
-            static void Open_Postfix(RecordDirectory directory)
+            static void Open_Postfix(InventoryBrowser __instance, RecordDirectory directory)
             {
+                if (!IsPatchTarget(__instance)) return;
                 if (directory is null)
                 {
                     // ShowInventoryOwnersからnullで呼ばれたタイミングではキャッシュクリアする
@@ -347,6 +348,12 @@ namespace BetterInventoryBrowser
         public enum SortMethod
         {
             Default, Name, Updated, Created
+        }
+
+        public static bool IsPatchTarget(BrowserDialog instance)
+        {
+            // とりあえず LegacyInventory を対象にしない
+            return instance.Slot.GetComponentInParents<UserspaceRadiantDash>() != null;
         }
 
         private static void BuildSortButtons(RectTransform rootRect)
