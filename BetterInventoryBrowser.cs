@@ -19,6 +19,11 @@ namespace BetterInventoryBrowser
         public override string Version => "0.4.1";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
+        private const string MOD_ID = "dev.baru.neos.BetterInventoryBrowser";
+        private const string SIDEBAR_RECT_ID = $"{MOD_ID}.SidebarRect";
+        private const string SORTBTNS_ROOT_RECT_ID = $"{MOD_ID}.SortButtonsRootRect";
+        private const string SIDEBAR_TOGGLE_TXT_ID = $"{MOD_ID}.SidebarToggleButton.Text";
+
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<List<RecordDirectoryInfo>> PinnedDirectoriesKey = 
             new ModConfigurationKey<List<RecordDirectoryInfo>>("_PinnedDirectories", "PinnedDirectories", () => new List<RecordDirectoryInfo>(), true);
@@ -43,9 +48,7 @@ namespace BetterInventoryBrowser
             new ModConfigurationKey<float>("SidebarWidth", "Width of Sidebar", () => 180f);
 
         private static ModConfiguration? _config;
-        private static RectTransform? _sidebarRect;
         private static List<RecordDirectoryInfo> _recentDirectories = new List<RecordDirectoryInfo>();
-        private static RectTransform? _sortButtonsRoot;
 
         public override void OnEngineInit()
         {
@@ -57,17 +60,20 @@ namespace BetterInventoryBrowser
             }
             _config.OnThisConfigurationChanged += OnModConfigurationChanged;
 
-            Harmony harmony = new Harmony("dev.baru.neos.BetterInventoryBrowser");
+            Harmony harmony = new Harmony(MOD_ID);
             harmony.PatchAll();
             RecordDirectory_GetSubdirectoryAtPath_Patch.Patch(harmony);
         }
 
         private void OnModConfigurationChanged(ConfigurationChangedEvent configEvent)
         {
-            if (configEvent.Key == SidebarWidthKey && _sidebarRect != null)
+            if (configEvent.Key == SidebarWidthKey)
             {
-                _sidebarRect.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
-                ReGridLayout();
+                foreach (var browser in GetPatchTargetBrowsers())
+                {
+                    GetSidebarRectTransform(browser).Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
+                    ReGridLayout(browser);
+                }
             }
         }
 
@@ -91,13 +97,17 @@ namespace BetterInventoryBrowser
                 toggleButton.RectTransform.AnchorMin.Value = new float2(0, 0.8f);
                 toggleButton.RectTransform.OffsetMin.Value = new float2(-25, 0);
                 toggleButton.RectTransform.OffsetMax.Value = new float2(-5, -5);
+                toggleButton.Slot.GetComponentInChildren<Text>().Slot.AttachComponent<Comment>().Text.Value = SIDEBAR_TOGGLE_TXT_ID;
                 toggleButton.LocalPressed += (IButton button, ButtonEventData eventData) =>
                 {
-                    if (_sidebarRect == null) return;
-                    var nextActive = !_sidebarRect.Slot.ActiveSelf;
-                    _sidebarRect.Slot.ActiveSelf = nextActive;
-                    toggleButton.Slot.GetComponentInChildren<Text>().Content.Value = nextActive ? "<<" : ">>";
-                    ReGridLayout();
+                    var nextActive = !(_config?.GetValue(IsOpenSidebarKey) ?? true);
+                    foreach (var browser in GetPatchTargetBrowsers())
+                    {
+                        GetSidebarRectTransform(browser).Slot.ActiveSelf = nextActive;
+                        browser.Slot.GetComponentInChildren<Comment>(c => c.Text.Value == SIDEBAR_TOGGLE_TXT_ID)
+                            .Slot.GetComponent<Text>().Content.Value = nextActive ? "<<" : ">>";
+                        ReGridLayout(browser);
+                    }
                     _config?.Set(IsOpenSidebarKey, nextActive);
                 };
                 uiBuilder.NestOut();
@@ -105,7 +115,7 @@ namespace BetterInventoryBrowser
                 // Sidebar
                 sidebarRt = uiBuilder.Panel();
                 sidebarRt.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
-                _sidebarRect = sidebarRt;
+                sidebarRt.Slot.AttachComponent<Comment>().Text.Value = SIDEBAR_RECT_ID;
                 BuildSidebar(sidebarRt);
                 sidebarRt.Slot.ActiveSelf = isOpenSidebar;
                 uiBuilder.NestOut();
@@ -125,6 +135,7 @@ namespace BetterInventoryBrowser
                 var buttonsBuilder = new UIBuilder(rightRt);
                 buttonsBuilder.HorizontalLayout(0f, 0f, Alignment.MiddleRight).ForceExpandWidth.Value = false;
                 ____buttonsRoot.Target = buttonsBuilder.Root;
+                leftRt.Slot.AttachComponent<Comment>().Text.Value = SORTBTNS_ROOT_RECT_ID;
                 BuildSortButtons(leftRt);
             }
 
@@ -229,7 +240,7 @@ namespace BetterInventoryBrowser
                     }
                     _recentDirectories.RemoveRange(maxCount, _recentDirectories.Count - maxCount);
                 }
-                BuildSidebar();
+                ReBuildAllSidebars();
             }
 
             [HarmonyTranspiler]
@@ -353,12 +364,35 @@ namespace BetterInventoryBrowser
         public static bool IsPatchTarget(BrowserDialog instance)
         {
             // とりあえず LegacyInventory を対象にしない
-            return instance.Slot.GetComponentInParents<UserspaceRadiantDash>() != null;
+            return (InventoryBrowser)instance == InventoryBrowser.CurrentUserspaceInventory 
+                || instance.Slot.GetComponentInParents<UserspaceRadiantDash>() != null;
+        }
+
+        public static IEnumerable<InventoryBrowser> GetPatchTargetBrowsers()
+        {
+            foreach (var globallyRegistered in Userspace.UserspaceWorld.GetGloballyRegisteredComponents<InventoryBrowser>())
+            {
+                if (IsPatchTarget(globallyRegistered)) yield return globallyRegistered;
+            }
+        }
+
+        private static RectTransform GetRectTransformById(InventoryBrowser instance, string id)
+        {
+            return instance.Slot.GetComponentInChildren<Comment>(c => c.Text.Value == id).Slot.GetComponent<RectTransform>();
+        }
+
+        public static RectTransform GetSidebarRectTransform(InventoryBrowser instance)
+        {
+            return GetRectTransformById(instance, SIDEBAR_RECT_ID);
+        }
+
+        public static RectTransform GetSortButtonsRootRectTransform(InventoryBrowser instance)
+        {
+            return GetRectTransformById(instance, SORTBTNS_ROOT_RECT_ID);
         }
 
         private static void BuildSortButtons(RectTransform rootRect)
         {
-            _sortButtonsRoot = rootRect;
             rootRect.Slot.DestroyChildren();
             var uiBuilder = new UIBuilder(rootRect);
             uiBuilder.HorizontalLayout(4f, 4f, Alignment.MiddleLeft);
@@ -376,17 +410,14 @@ namespace BetterInventoryBrowser
             }
         }
 
-        private static void BuildSortButtons()
-        {
-            if (_sortButtonsRoot is null) return;
-            BuildSortButtons(_sortButtonsRoot);
-        }
-
         private static void UpdateSortMethod(SortMethod sortMethod)
         {
             _config?.Set(SelectedSortMethodKey, sortMethod);
             InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
-            BuildSortButtons();
+            foreach (var browser in GetPatchTargetBrowsers())
+            {
+                BuildSortButtons(GetSortButtonsRootRectTransform(browser));
+            }
         }
 
         private static readonly MethodInfo _generateContentMethod = AccessTools.Method(typeof(BrowserDialog), "GenerateContent");
@@ -434,10 +465,12 @@ namespace BetterInventoryBrowser
             uiBuilder.NestOut();
         }
 
-        private static void BuildSidebar()
+        private static void ReBuildAllSidebars()
         {
-            if (_sidebarRect is null) return;
-            BuildSidebar(_sidebarRect);
+            foreach (var browser in GetPatchTargetBrowsers())
+            {
+                BuildSidebar(GetSidebarRectTransform(browser));
+            }
         }
 
         private static void TogglePinCurrentDirectory()
@@ -455,7 +488,7 @@ namespace BetterInventoryBrowser
             }
             _config?.Set(PinnedDirectoriesKey, pinnedDirs);
 
-            BuildSidebar();
+            ReBuildAllSidebars();
         }
 
         private static void UpdatePinButtonText(Button button, RecordDirectoryInfo directory)
@@ -464,10 +497,9 @@ namespace BetterInventoryBrowser
             button.Slot.GetComponentInChildren<Text>().Content.Value = pinnedDirs.Contains(directory) ? "★" : "☆";
         }
 
-        private static void ReGridLayout()
+        private static void ReGridLayout(BrowserDialog instance)
         {
-            var layoutRootSlot = ((SyncRef<SlideSwapRegion>)AccessTools.Field(typeof(BrowserDialog), "_swapper")
-                .GetValue(InventoryBrowser.CurrentUserspaceInventory)).Target
+            var layoutRootSlot = ((SyncRef<SlideSwapRegion>)AccessTools.Field(typeof(BrowserDialog), "_swapper").GetValue(instance)).Target
                 .Slot.GetComponentInChildren<GridLayout>().Slot;
             var dummy = layoutRootSlot.AddSlot("dummy", false);
             layoutRootSlot.RunInUpdates(3, () =>
