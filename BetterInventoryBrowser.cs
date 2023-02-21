@@ -16,7 +16,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.4.1";
+        public override string Version => "0.5.0";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         private const string MOD_ID = "dev.baru.neos.BetterInventoryBrowser";
@@ -33,6 +33,9 @@ namespace BetterInventoryBrowser
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<SortMethod> SelectedSortMethodKey =
             new ModConfigurationKey<SortMethod>("_SelectedSortMethod", "SelectedSortMethod", () => SortMethod.Default, true);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<LayoutMode> SelectedLayoutModeKey =
+            new ModConfigurationKey<LayoutMode>("_SelectedLayoutMod", "SelectedLayoutMode", () => LayoutMode.DefaultGrid, false);
 
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<int> MaxRecentDirectoryCountKey =
@@ -183,9 +186,82 @@ namespace BetterInventoryBrowser
                 return codes.AsEnumerable();
             }
 
+            [HarmonyTranspiler]
+            [HarmonyPatch("GenerateContent")]
+            static IEnumerable<CodeInstruction> GenerateContent_Transpiler(IEnumerable<CodeInstruction> instructions)
+            {
+                var foundLdfldGrid = false;
+                var inReplaceArea = false;
+                var isPatched = false;
+                var gridField = AccessTools.Field(typeof(BrowserDialog), "_grid");
+                var setTargetMethod = AccessTools.Method(typeof(SyncRef<GridLayout>), "set_Target");
+
+                foreach (var code in instructions)
+                {
+                    if (inReplaceArea)
+                    {
+                        if (code.Calls(setTargetMethod))
+                        {
+                            inReplaceArea = false;
+                            isPatched = true;
+                        }
+                        continue;
+                    }
+                    if (!foundLdfldGrid && code.LoadsField(gridField))
+                    {
+                        foundLdfldGrid = true;
+                    }
+                    if (!isPatched && foundLdfldGrid && !inReplaceArea && code.IsLdloc())
+                    {
+                        inReplaceArea = true;
+                        yield return code;
+                        yield return new CodeInstruction(OpCodes.Ldarg_0);
+                        yield return new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(BrowserDialog), nameof(BrowserDialog.ItemSize)));
+                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(BrowserDialog_Patch), nameof(BuildLayout)));
+                        continue;
+                    }
+                    yield return code;
+                }
+            }
+
+            [HarmonyTranspiler]
+            [HarmonyPatch("GenerateBackButton")]
+            static IEnumerable<CodeInstruction> GenerateBackButton_Transpiler(IEnumerable<CodeInstruction> instructions)
+            {
+                var codes = instructions.ToList();
+                if (codes[codes.Count - 2].opcode == OpCodes.Pop)
+                {
+                    codes[codes.Count - 2] = new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(BrowserDialog_Patch), nameof(FixBackButtonLayout)));
+                }
+                else
+                {
+                    Error("Failed to patch BrowserDialog.GenerateBackButton: Unexpected sequence of IL");
+                }
+                return codes.AsEnumerable();
+            }
+
             static void SetFlexibleWidthToOne(Button button)
             {
                 button.Slot.GetComponent<LayoutElement>().FlexibleWidth.Value = 1f;
+            }
+
+            static void BuildLayout(SyncRef<GridLayout> grid, UIBuilder uiBuilder, Sync<float> itemSize)
+            {
+                if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
+                {
+                    uiBuilder.VerticalLayout(4, 4, Alignment.TopLeft);
+                }
+                else
+                {
+                    var cellSize = float2.One * itemSize.Value;
+                    var spacing = float2.One * 4;
+                    grid.Target = uiBuilder.GridLayout(in cellSize, in spacing);
+                }
+            }
+
+            static void FixBackButtonLayout(Button button)
+            {
+                FixItemLayoutElement(button.Slot);
             }
         }
 
@@ -249,6 +325,7 @@ namespace BetterInventoryBrowser
             {
                 var getSubdirMethod = AccessTools.PropertyGetter(typeof(RecordDirectory), "Subdirectories");
                 var getRecordsMethod = AccessTools.PropertyGetter(typeof(RecordDirectory), "Records");
+                var getThumbnailUriMethod = AccessTools.PropertyGetter(typeof(Record), nameof(Record.ThumbnailURI));
                 foreach (var code in instructions)
                 {
                     yield return code;
@@ -262,7 +339,19 @@ namespace BetterInventoryBrowser
                         yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortRecords)));
                         Msg("Patched InventoryBrowser.UpdateDirectoryItems for records");
                     }
+                    else if (code.Calls(getThumbnailUriMethod))
+                    {
+                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(FilterIconUri)));
+                        Msg("Patched FilterIconUri");
+                    }
                 }
+            }
+
+            [HarmonyPostfix]
+            [HarmonyPatch("ProcessItem")]
+            static void ProcessItem_Postfix(InventoryItemUI item)
+            {
+                FixItemLayoutElement(item.Slot);
             }
 
             static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories)
@@ -314,6 +403,11 @@ namespace BetterInventoryBrowser
                         return records;
                 }
             }
+
+            static string FilterIconUri(string uri)
+            {
+                return (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.DefaultGrid ? uri : string.Empty;
+            }
         }
 
         class RecordDirectory_GetSubdirectoryAtPath_Patch
@@ -359,6 +453,21 @@ namespace BetterInventoryBrowser
         public enum SortMethod
         {
             Default, Name, Updated, Created
+        }
+
+        public enum LayoutMode
+        {
+            DefaultGrid, NoImgGrid, Detail
+        }
+
+        static void FixItemLayoutElement(Slot slot)
+        {
+            if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
+            {
+                var elm = slot.GetComponent<LayoutElement>();
+                elm.MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE / 2;
+                elm.FlexibleWidth.Value = 1;
+            }
         }
 
         public static bool IsPatchTarget(BrowserDialog instance)
