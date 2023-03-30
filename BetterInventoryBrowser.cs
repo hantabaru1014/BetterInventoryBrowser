@@ -542,6 +542,11 @@ namespace BetterInventoryBrowser
                 itemBtn.Slot.GetComponent<LayoutElement>().MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE * 0.5f;
                 itemBtn.LocalPressed += async (IButton btn, ButtonEventData data) =>
                 {
+                    if (InventoryBrowser.CurrentUserspaceInventory.Engine.Cloud.CurrentUser is null)
+                    {
+                        ReBuildAllSidebars();
+                        return;
+                    }
                     Msg($"Open : {dir}");
                     _generateContentMethod.Invoke(InventoryBrowser.CurrentUserspaceInventory, new object[] { SlideSwapRegion.Slide.Right, true });
                     var recordDir = await dir.ToRecordDirectory();
@@ -556,6 +561,9 @@ namespace BetterInventoryBrowser
         private static void BuildSidebar(RectTransform rectTransform)
         {
             rectTransform.Slot.DestroyChildren();
+
+            // 未ログイン状態でアクセス権が無い場所を開くと、インベントリが壊れて操作できなくなるのでその対策
+            if (rectTransform.Engine.Cloud.CurrentUser is null) return;
 
             var uiBuilder = new UIBuilder(rectTransform);
             var vertLayout = uiBuilder.VerticalLayout(8f, 0f, Alignment.TopCenter);

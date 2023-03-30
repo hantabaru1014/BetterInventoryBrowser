@@ -8,6 +8,7 @@
     <NeosPath Condition="Exists('C:\Program Files (x86)\Steam\steamapps\common\NeosVR\')">C:\Program Files (x86)\Steam\steamapps\common\NeosVR\</NeosPath>
     <NeosPath Condition="Exists('C:\Neos\app\')">C:\Neos\app\</NeosPath>
     <NeosPath Condition="Exists('$(HOME)/.steam/steam/steamapps/common/NeosVR/')">$(HOME)/.steam/steam/steamapps/common/NeosVR/</NeosPath>
+    <NeosPath Condition="Exists('C:\NeosModDev\app\')">C:\NeosModDev\app\</NeosPath>
     <CopyLocal>false</CopyLocal>
     <CopyToMods Condition="'$(CopyToMods)'==''">true</CopyToMods>
     <DebugSymbols Condition="'$(Configuration)'=='Release'">false</DebugSymbols>
