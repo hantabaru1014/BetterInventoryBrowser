@@ -49,6 +49,12 @@ namespace BetterInventoryBrowser
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<float> SidebarWidthKey =
             new ModConfigurationKey<float>("SidebarWidth", "Width of Sidebar", () => 180f);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<float> DetailRowHeightKey =
+            new ModConfigurationKey<float>("DetailRowHeight", "Row height in detail layout", () => BrowserDialog.DEFAULT_ITEM_SIZE / 2);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<float> NameWidthOnDetailKey =
+            new ModConfigurationKey<float>("NameWidthOnDetail", "Width of name column in detail layout", () => 0.7f, false, (v) => 0 < v && v < 1);
 
         private static ModConfiguration? _config;
         private static List<RecordDirectoryInfo> _recentDirectories = new List<RecordDirectoryInfo>();
@@ -77,6 +83,10 @@ namespace BetterInventoryBrowser
                     GetSidebarRectTransform(browser).Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
                     ReGridLayout(browser);
                 }
+            }
+            if (configEvent.Key == DetailRowHeightKey || configEvent.Key == NameWidthOnDetailKey)
+            {
+                InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
             }
         }
 
@@ -330,8 +340,14 @@ namespace BetterInventoryBrowser
                 var getSubdirMethod = AccessTools.PropertyGetter(typeof(RecordDirectory), "Subdirectories");
                 var getRecordsMethod = AccessTools.PropertyGetter(typeof(RecordDirectory), "Records");
                 var getThumbnailUriMethod = AccessTools.PropertyGetter(typeof(Record), nameof(Record.ThumbnailURI));
+                var processItemMethod = AccessTools.Method(typeof(InventoryBrowser), "ProcessItem");
                 foreach (var code in instructions)
                 {
+                    if (code.Calls(processItemMethod))
+                    {
+                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(ProcessItem4DetailLayout)));
+                        Msg("Patched InventoryBrowser.UpdateDirectoryItems ProcessItem4DetailLayout");
+                    }
                     yield return code;
                     if (code.Calls(getSubdirMethod))
                     {
@@ -412,6 +428,38 @@ namespace BetterInventoryBrowser
             {
                 return (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.DefaultGrid ? uri : string.Empty;
             }
+
+            static InventoryItemUI ProcessItem4DetailLayout(InventoryItemUI item)
+            {
+                if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) != LayoutMode.Detail)
+                {
+                    return item;
+                }
+                var btnSlot = item.Slot;
+                btnSlot.DestroyChildren();
+                var uiBuilder = new UIBuilder(btnSlot);
+                uiBuilder.HorizontalLayout(5f, 5f, Alignment.MiddleLeft);
+                uiBuilder.Text(SanitizeItemName4Detail(item.ItemName), true, Alignment.MiddleLeft)
+                    .Slot.GetComponent<LayoutElement>().FlexibleWidth.Value = _config?.GetValue(NameWidthOnDetailKey) ?? 0.7f;
+                uiBuilder.Text(GetLastModTimeText(item), true, Alignment.MiddleLeft);
+
+                return item;
+            }
+
+            static FieldInfo iiui_itemField = AccessTools.Field(typeof(InventoryItemUI), "Item");
+            static FieldInfo iiui_directoryField = AccessTools.Field(typeof(InventoryItemUI), "Directory");
+            static string GetLastModTimeText(InventoryItemUI item)
+            {
+                var record = iiui_itemField.GetValue(item) as Record;
+                var recordDirectory = iiui_directoryField.GetValue(item) as RecordDirectory;
+                var time = record?.LastModificationTime ?? recordDirectory?.EntryRecord.LastModificationTime;
+                return time.HasValue ? time.Value.ToString() : string.Empty;
+            }
+
+            static string SanitizeItemName4Detail(string name)
+            {
+                return name.Replace('\n', ' ').Replace("<br>", " ");
+            }
         }
 
         class RecordDirectory_GetSubdirectoryAtPath_Patch
@@ -469,7 +517,7 @@ namespace BetterInventoryBrowser
             if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
             {
                 var elm = slot.GetComponent<LayoutElement>();
-                elm.MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE / 2;
+                elm.MinHeight.Value = _config?.GetValue(DetailRowHeightKey) ?? BrowserDialog.DEFAULT_ITEM_SIZE / 2;
                 elm.FlexibleWidth.Value = 1;
             }
         }
