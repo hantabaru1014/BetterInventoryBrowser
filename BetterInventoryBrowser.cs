@@ -21,8 +21,10 @@ namespace BetterInventoryBrowser
 
         private const string MOD_ID = "dev.baru.neos.BetterInventoryBrowser";
         private const string SIDEBAR_RECT_ID = $"{MOD_ID}.SidebarRect";
+        private const string RIGHT_SIDEBAR_RECT_ID = $"{MOD_ID}.RightSidebarRect";
         private const string SORTBTNS_ROOT_RECT_ID = $"{MOD_ID}.SortButtonsRootRect";
         private const string SIDEBAR_TOGGLE_TXT_ID = $"{MOD_ID}.SidebarToggleButton.Text";
+        private const string RIGHT_SIDEBAR_TOGGLE_TXT_ID = $"{MOD_ID}.RightSidebarToggleButton.Text";
 
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<List<RecordDirectoryInfo>> PinnedDirectoriesKey = 
@@ -30,6 +32,9 @@ namespace BetterInventoryBrowser
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<bool> IsOpenSidebarKey =
             new ModConfigurationKey<bool>("_IsOpenSidebar", "IsOpenSidebar", () => true, true);
+        [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<bool> IsOpenRightSidebarKey =
+            new ModConfigurationKey<bool>("_IsOpenRightSidebar", "IsOpenRightSidebar", () => false, true);
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<SortMethod> SelectedSortMethodKey =
             new ModConfigurationKey<SortMethod>("_SelectedSortMethod", "SelectedSortMethod", () => SortMethod.Default, true);
@@ -50,6 +55,9 @@ namespace BetterInventoryBrowser
         public static readonly ModConfigurationKey<float> SidebarWidthKey =
             new ModConfigurationKey<float>("SidebarWidth", "Width of Sidebar", () => 180f);
         [AutoRegisterConfigKey]
+        public static readonly ModConfigurationKey<float> RightSidebarWidthKey =
+            new ModConfigurationKey<float>("RightSidebarWidth", "Width of RightSidebar", () => 180f);
+        [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<float> DetailRowHeightKey =
             new ModConfigurationKey<float>("DetailRowHeight", "Row height in detail layout", () => BrowserDialog.DEFAULT_ITEM_SIZE / 2);
         [AutoRegisterConfigKey]
@@ -58,6 +66,9 @@ namespace BetterInventoryBrowser
 
         private static ModConfiguration? _config;
         private static List<RecordDirectoryInfo> _recentDirectories = new List<RecordDirectoryInfo>();
+
+        private static FieldInfo _iiui_itemField = AccessTools.Field(typeof(InventoryItemUI), "Item");
+        private static FieldInfo _iiui_directoryField = AccessTools.Field(typeof(InventoryItemUI), "Directory");
 
         public override void OnEngineInit()
         {
@@ -98,7 +109,6 @@ namespace BetterInventoryBrowser
             static void OnAttach_Postfix(BrowserDialog __instance, SyncRef<SlideSwapRegion> ____swapper, SyncRef<Slot> ____buttonsRoot)
             {
                 if (!(__instance is InventoryBrowser) || __instance.World != Userspace.UserspaceWorld || !IsPatchTarget(__instance)) return;
-                RectTransform sidebarRt, contentRt;
                 var originalSwapperSlot = ____swapper.Target.Slot;
                 var uiBuilder = new UIBuilder(originalSwapperSlot);
                 uiBuilder.HorizontalLayout(0, 0, Alignment.TopLeft).ForceExpandWidth.Value = false;
@@ -126,7 +136,7 @@ namespace BetterInventoryBrowser
                 uiBuilder.NestOut();
                 
                 // Sidebar
-                sidebarRt = uiBuilder.Panel();
+                var sidebarRt = uiBuilder.Panel();
                 sidebarRt.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(SidebarWidthKey) ?? 180f;
                 sidebarRt.Slot.AttachComponent<Comment>().Text.Value = SIDEBAR_RECT_ID;
                 BuildSidebar(sidebarRt);
@@ -134,8 +144,38 @@ namespace BetterInventoryBrowser
                 uiBuilder.NestOut();
 
                 // Main Area
-                contentRt = uiBuilder.Panel();
+                var contentRt = uiBuilder.Panel();
                 contentRt.Slot.GetComponent<LayoutElement>().FlexibleWidth.Value = 1f;
+                uiBuilder.NestOut();
+
+                // Right Sidebar
+                var isOpenRightSidebar = _config?.GetValue(IsOpenRightSidebarKey) ?? false;
+                var rightSidebarRt = uiBuilder.Panel();
+                rightSidebarRt.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(RightSidebarWidthKey) ?? 180f;
+                rightSidebarRt.Slot.AttachComponent<Comment>().Text.Value = RIGHT_SIDEBAR_RECT_ID;
+                BuildRightSidebar(rightSidebarRt, ((InventoryBrowser)__instance).SelectedInventoryItem);
+                rightSidebarRt.Slot.ActiveSelf = isOpenRightSidebar;
+                uiBuilder.NestOut();
+
+                // Right Sidebar Toggle Button
+                uiBuilder.Panel().Slot.GetComponent<LayoutElement>().PreferredWidth.Value = 0;
+                var toggleRightSidebarButton = uiBuilder.Button(isOpenRightSidebar ? ">>" : "<<");
+                toggleRightSidebarButton.RectTransform.AnchorMin.Value = new float2(1, 0.8f);
+                toggleRightSidebarButton.RectTransform.OffsetMin.Value = new float2(5, 0);
+                toggleRightSidebarButton.RectTransform.OffsetMax.Value = new float2(25, -5);
+                toggleRightSidebarButton.Slot.GetComponentInChildren<Text>().Slot.AttachComponent<Comment>().Text.Value = RIGHT_SIDEBAR_TOGGLE_TXT_ID;
+                toggleRightSidebarButton.LocalPressed += (IButton button, ButtonEventData eventData) =>
+                {
+                    var nextActive = !(_config?.GetValue(IsOpenRightSidebarKey) ?? false);
+                    foreach (var browser in GetPatchTargetBrowsers())
+                    {
+                        GetRightSidebarRectTransform(browser).Slot.ActiveSelf = nextActive;
+                        browser.Slot.GetComponentInChildren<Comment>(c => c.Text.Value == RIGHT_SIDEBAR_TOGGLE_TXT_ID)
+                            .Slot.GetComponent<Text>().Content.Value = nextActive ? ">>" : "<<";
+                        ReGridLayout(browser);
+                    }
+                    _config?.Set(IsOpenRightSidebarKey, nextActive);
+                };
                 uiBuilder.NestOut();
 
                 ____swapper.Target = contentRt.Slot.AttachComponent<SlideSwapRegion>(true, null);
@@ -374,6 +414,13 @@ namespace BetterInventoryBrowser
                 FixItemLayoutElement(item.Slot);
             }
 
+            [HarmonyPostfix]
+            [HarmonyPatch("OnItemSelected")]
+            static void OnItemSelected_Postfix(InventoryBrowser __instance, BrowserItem currentItem)
+            {
+                BuildRightSidebar(GetRightSidebarRectTransform(__instance), (InventoryItemUI)currentItem);
+            }
+
             static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories)
             {
                 switch (_config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default)
@@ -446,12 +493,10 @@ namespace BetterInventoryBrowser
                 return item;
             }
 
-            static FieldInfo iiui_itemField = AccessTools.Field(typeof(InventoryItemUI), "Item");
-            static FieldInfo iiui_directoryField = AccessTools.Field(typeof(InventoryItemUI), "Directory");
             static string GetLastModTimeText(InventoryItemUI item)
             {
-                var record = iiui_itemField.GetValue(item) as Record;
-                var recordDirectory = iiui_directoryField.GetValue(item) as RecordDirectory;
+                var record = _iiui_itemField.GetValue(item) as Record;
+                var recordDirectory = _iiui_directoryField.GetValue(item) as RecordDirectory;
                 var time = record?.LastModificationTime ?? recordDirectory?.EntryRecord.LastModificationTime;
                 return time.HasValue ? time.Value.ToString() : string.Empty;
             }
@@ -545,6 +590,11 @@ namespace BetterInventoryBrowser
         public static RectTransform GetSidebarRectTransform(InventoryBrowser instance)
         {
             return GetRectTransformById(instance, SIDEBAR_RECT_ID);
+        }
+
+        public static RectTransform GetRightSidebarRectTransform(InventoryBrowser instance)
+        {
+            return GetRectTransformById(instance, RIGHT_SIDEBAR_RECT_ID);
         }
 
         public static RectTransform GetSortButtonsRootRectTransform(InventoryBrowser instance)
@@ -650,6 +700,35 @@ namespace BetterInventoryBrowser
             uiBuilder.NestOut();
         }
 
+        private static void BuildRightSidebar(RectTransform rectTransform, InventoryItemUI item)
+        {
+            rectTransform.Slot.DestroyChildren();
+            if (item is null) return;
+
+            var uiBuilder = new UIBuilder(rectTransform);
+            var vertLayout = uiBuilder.VerticalLayout(8f, 10f, Alignment.TopCenter);
+            vertLayout.ForceExpandHeight.Value = false;
+
+            if (_iiui_itemField.GetValue(item) is Record record)
+            {
+                Msg("record exists");
+                if (Uri.TryCreate(record.ThumbnailURI, UriKind.Absolute, out var result))
+                {
+                    Msg("created img: "+result.ToString());
+                    uiBuilder.Text("thumbnail:");
+                    uiBuilder.Image(result);
+                }
+                else
+                {
+                    Msg("failed uri.create");
+                }
+                uiBuilder.Text($"<b>Description:</b>\n{record.Description}");
+                uiBuilder.Text($"<b>LastUpdated:</b>\n{record.LastModificationTime}");
+                uiBuilder.Text($"<b>UpdateUser:</b>\n{record.LastModifyingUserId}");
+                uiBuilder.Text($"<b>Tags:</b>\n{string.Join(", ", record.Tags)}");
+            }
+        }
+
         private static void ReBuildAllSidebars()
         {
             foreach (var browser in GetPatchTargetBrowsers())
@@ -684,8 +763,15 @@ namespace BetterInventoryBrowser
 
         private static void ReGridLayout(BrowserDialog instance)
         {
-            var layoutRootSlot = ((SyncRef<SlideSwapRegion>)AccessTools.Field(typeof(BrowserDialog), "_swapper").GetValue(instance)).Target
-                .Slot.GetComponentInChildren<GridLayout>().Slot;
+            var layoutRootSlot = ((SyncRef<SlideSwapRegion>)AccessTools.Field(typeof(BrowserDialog), "_swapper").GetValue(instance)).Target.Slot;
+            if (_config?.GetValue(SelectedLayoutModeKey) == LayoutMode.Detail)
+            {
+                layoutRootSlot = layoutRootSlot.GetComponentInChildren<VerticalLayout>().Slot;
+            }
+            else
+            {
+                layoutRootSlot = layoutRootSlot.GetComponentInChildren<GridLayout>().Slot;
+            }
             var dummy = layoutRootSlot.AddSlot("dummy", false);
             layoutRootSlot.RunInUpdates(3, () =>
             {
