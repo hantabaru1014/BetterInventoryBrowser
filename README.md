@@ -3,7 +3,7 @@
 A [NeosModLoader](https://github.com/zkxs/NeosModLoader) mod for [Neos VR](https://neos.com/) that UI tweaks for InventoryBrowser.
 
 ## Current features
-![ss_BetterInventoryBrowser](https://user-images.githubusercontent.com/16133291/206857834-aefef7ae-64e1-43e3-acc5-a1382da9ab14.png)
+![screenshot](https://user-images.githubusercontent.com/16133291/236672368-20c84717-c45f-46e9-85bc-c9442548e7b2.png)
 
 - Added a sidebar to the left of the inventory
     - Pin directory to the sidebar
@@ -12,6 +12,13 @@ A [NeosModLoader](https://github.com/zkxs/NeosModLoader) mod for [Neos VR](https
 - Sort by (Default/Name/Updated/Created)
     - Strip RTF tags on sort by name (Toggleable in settings)
     - Sort folders by name and items by update on "Default" (Toggleable in settings)
+- Additional layout
+    - NoImgGrid : Default grid layout but no thumbnails
+    - Detail : VerticalLayout with extra information
+        - You can change the row height, etc. in the settings
+- Added a sidebar to the right of the inventory
+    - Display thumbnails, update date, etc.
+    - The sidebar can be shown/hide and width can be set on settings
 
 ## Installation
 1. Install [NeosModLoader](https://github.com/zkxs/NeosModLoader).
