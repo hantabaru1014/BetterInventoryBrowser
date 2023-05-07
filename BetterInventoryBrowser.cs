@@ -95,6 +95,14 @@ namespace BetterInventoryBrowser
                     ReGridLayout(browser);
                 }
             }
+            if (configEvent.Key == RightSidebarWidthKey)
+            {
+                foreach (var browser in GetPatchTargetBrowsers())
+                {
+                    GetRightSidebarRectTransform(browser).Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(RightSidebarWidthKey) ?? 180f;
+                    ReGridLayout(browser);
+                }
+            }
             if (configEvent.Key == DetailRowHeightKey || configEvent.Key == NameWidthOnDetailKey)
             {
                 InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
@@ -708,24 +716,25 @@ namespace BetterInventoryBrowser
             var uiBuilder = new UIBuilder(rectTransform);
             var vertLayout = uiBuilder.VerticalLayout(8f, 10f, Alignment.TopCenter);
             vertLayout.ForceExpandHeight.Value = false;
+            vertLayout.ForceExpandWidth.Value = true;
 
+            Record? entryRecord = null;
             if (_iiui_itemField.GetValue(item) is Record record)
             {
-                Msg("record exists");
+                entryRecord = record;
                 if (Uri.TryCreate(record.ThumbnailURI, UriKind.Absolute, out var result))
                 {
-                    Msg("created img: "+result.ToString());
-                    uiBuilder.Text("thumbnail:");
-                    uiBuilder.Image(result);
+                    uiBuilder.Image(result).Slot.GetComponent<LayoutElement>().MinHeight.Value = (_config?.GetValue(RightSidebarWidthKey) ?? 180f) - 10;
                 }
-                else
-                {
-                    Msg("failed uri.create");
-                }
-                uiBuilder.Text($"<b>Description:</b>\n{record.Description}");
-                uiBuilder.Text($"<b>LastUpdated:</b>\n{record.LastModificationTime}");
-                uiBuilder.Text($"<b>UpdateUser:</b>\n{record.LastModifyingUserId}");
-                uiBuilder.Text($"<b>Tags:</b>\n{string.Join(", ", record.Tags)}");
+            }
+            else if (_iiui_directoryField.GetValue(item) is RecordDirectory recordDirectory)
+            {
+                entryRecord = recordDirectory.EntryRecord;
+            }
+            if (entryRecord is not null)
+            {
+                uiBuilder.Text($"<b>LastUpdated:</b>\n{entryRecord.LastModificationTime}").HorizontalAlign.Value = TextHorizontalAlignment.Left;
+                uiBuilder.Text($"<b>UpdatedUser:</b>\n{entryRecord.LastModifyingUserId}").HorizontalAlign.Value = TextHorizontalAlignment.Left;
             }
         }
 
