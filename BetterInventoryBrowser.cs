@@ -16,7 +16,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.5.0";
+        public override string Version => "0.5.1";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         private const string MOD_ID = "dev.baru.neos.BetterInventoryBrowser";
@@ -307,8 +307,10 @@ namespace BetterInventoryBrowser
 
             static void BuildLayout(SyncRef<GridLayout> grid, UIBuilder uiBuilder, Sync<float> itemSize, BrowserDialog instance)
             {
-                if (typeof(InventoryBrowser).IsInstanceOfType(instance) &&
-                    (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
+                if (typeof(InventoryBrowser).IsInstanceOfType(instance)
+                    && ((InventoryBrowser)instance).CurrentDirectory != null
+                    && ((InventoryBrowser)instance).CurrentDirectory.Path != "NONE"
+                    && (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
                 {
                     uiBuilder.VerticalLayout(4, 4, Alignment.TopLeft);
                 }
@@ -323,7 +325,13 @@ namespace BetterInventoryBrowser
             static void FixBackButtonLayout(Button button, BrowserDialog instance)
             {
                 if (typeof(FileBrowser).IsInstanceOfType(instance)) return;
-                FixItemLayoutElement(button.Slot);
+                if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail
+                    && typeof(InventoryBrowser).IsInstanceOfType(instance)
+                    && ((InventoryBrowser)instance).CurrentDirectory != null
+                    && ((InventoryBrowser)instance).CurrentDirectory.Path != "NONE")
+                {
+                    FixItemLayoutElement(button.Slot);
+                }
             }
         }
 
@@ -417,9 +425,13 @@ namespace BetterInventoryBrowser
 
             [HarmonyPostfix]
             [HarmonyPatch("ProcessItem")]
-            static void ProcessItem_Postfix(InventoryItemUI item)
+            static void ProcessItem_Postfix(InventoryBrowser __instance, InventoryItemUI item)
             {
-                FixItemLayoutElement(item.Slot);
+                if (__instance.CurrentDirectory != null
+                    && (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
+                {
+                    FixItemLayoutElement(item.Slot);
+                }
             }
 
             [HarmonyPostfix]
@@ -486,7 +498,9 @@ namespace BetterInventoryBrowser
 
             static InventoryItemUI ProcessItem4DetailLayout(InventoryItemUI item)
             {
-                if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) != LayoutMode.Detail)
+                if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) != LayoutMode.Detail
+                    || item.Inventory.CurrentDirectory is null
+                    || item.Inventory.CurrentDirectory.Path == "NONE")
                 {
                     return item;
                 }
@@ -567,12 +581,9 @@ namespace BetterInventoryBrowser
 
         static void FixItemLayoutElement(Slot slot)
         {
-            if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
-            {
-                var elm = slot.GetComponent<LayoutElement>();
-                elm.MinHeight.Value = _config?.GetValue(DetailRowHeightKey) ?? BrowserDialog.DEFAULT_ITEM_SIZE / 2;
-                elm.FlexibleWidth.Value = 1;
-            }
+            var elm = slot.GetComponent<LayoutElement>();
+            elm.MinHeight.Value = _config?.GetValue(DetailRowHeightKey) ?? BrowserDialog.DEFAULT_ITEM_SIZE / 2;
+            elm.FlexibleWidth.Value = 1;
         }
 
         public static bool IsPatchTarget(BrowserDialog instance)
