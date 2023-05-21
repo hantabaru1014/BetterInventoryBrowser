@@ -443,6 +443,7 @@ namespace BetterInventoryBrowser
             [HarmonyPatch("OnItemSelected")]
             static void OnItemSelected_Postfix(InventoryBrowser __instance, BrowserItem currentItem)
             {
+                if (!IsPatchTarget(__instance)) return;
                 BuildRightSidebar(GetRightSidebarRectTransform(__instance), (InventoryItemUI)currentItem);
             }
 
