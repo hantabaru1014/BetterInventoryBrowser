@@ -16,7 +16,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.5.1";
+        public override string Version => "0.5.2";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         private const string MOD_ID = "dev.baru.neos.BetterInventoryBrowser";
@@ -310,6 +310,7 @@ namespace BetterInventoryBrowser
                 if (typeof(InventoryBrowser).IsInstanceOfType(instance)
                     && ((InventoryBrowser)instance).CurrentDirectory != null
                     && ((InventoryBrowser)instance).CurrentDirectory.Path != "NONE"
+                    && IsPatchTarget(instance)
                     && (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
                 {
                     uiBuilder.VerticalLayout(4, 4, Alignment.TopLeft);
@@ -328,7 +329,8 @@ namespace BetterInventoryBrowser
                 if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail
                     && typeof(InventoryBrowser).IsInstanceOfType(instance)
                     && ((InventoryBrowser)instance).CurrentDirectory != null
-                    && ((InventoryBrowser)instance).CurrentDirectory.Path != "NONE")
+                    && ((InventoryBrowser)instance).CurrentDirectory.Path != "NONE"
+                    && IsPatchTarget(instance))
                 {
                     FixItemLayoutElement(button.Slot);
                 }
@@ -407,16 +409,19 @@ namespace BetterInventoryBrowser
                     yield return code;
                     if (code.Calls(getSubdirMethod))
                     {
+                        yield return new CodeInstruction(OpCodes.Ldarg_0);
                         yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortDirectories)));
                         Msg("Patched InventoryBrowser.UpdateDirectoryItems for directories");
                     }
                     else if (code.Calls(getRecordsMethod))
                     {
+                        yield return new CodeInstruction(OpCodes.Ldarg_0);
                         yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortRecords)));
                         Msg("Patched InventoryBrowser.UpdateDirectoryItems for records");
                     }
                     else if (code.Calls(getThumbnailUriMethod))
                     {
+                        yield return new CodeInstruction(OpCodes.Ldarg_0);
                         yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(FilterIconUri)));
                         Msg("Patched FilterIconUri");
                     }
@@ -427,7 +432,7 @@ namespace BetterInventoryBrowser
             [HarmonyPatch("ProcessItem")]
             static void ProcessItem_Postfix(InventoryBrowser __instance, InventoryItemUI item)
             {
-                if (__instance.CurrentDirectory != null
+                if (__instance.CurrentDirectory != null && IsPatchTarget(__instance)
                     && (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
                 {
                     FixItemLayoutElement(item.Slot);
@@ -441,8 +446,9 @@ namespace BetterInventoryBrowser
                 BuildRightSidebar(GetRightSidebarRectTransform(__instance), (InventoryItemUI)currentItem);
             }
 
-            static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories)
+            static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories, InventoryBrowser instance)
             {
+                if (!IsPatchTarget(instance)) return directories;
                 switch (_config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default)
                 {
                     case SortMethod.Updated:
@@ -466,8 +472,9 @@ namespace BetterInventoryBrowser
                 }
             }
 
-            static IReadOnlyList<Record> SortRecords(IReadOnlyList<Record> records)
+            static IReadOnlyList<Record> SortRecords(IReadOnlyList<Record> records, InventoryBrowser instance)
             {
+                if (!IsPatchTarget(instance)) return records;
                 switch (_config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default)
                 {
                     case SortMethod.Default:
@@ -491,8 +498,9 @@ namespace BetterInventoryBrowser
                 }
             }
 
-            static string FilterIconUri(string uri)
+            static string FilterIconUri(string uri, InventoryBrowser instance)
             {
+                if (!IsPatchTarget(instance)) return uri;
                 return (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.DefaultGrid ? uri : string.Empty;
             }
 
@@ -500,7 +508,8 @@ namespace BetterInventoryBrowser
             {
                 if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) != LayoutMode.Detail
                     || item.Inventory.CurrentDirectory is null
-                    || item.Inventory.CurrentDirectory.Path == "NONE")
+                    || item.Inventory.CurrentDirectory.Path == "NONE"
+                    || !IsPatchTarget(item.Inventory))
                 {
                     return item;
                 }
@@ -649,9 +658,9 @@ namespace BetterInventoryBrowser
         private static void UpdateSortMethod(SortMethod sortMethod)
         {
             _config?.Set(SelectedSortMethodKey, sortMethod);
-            InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
             foreach (var browser in GetPatchTargetBrowsers())
             {
+                browser.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
                 BuildSortButtons(GetSortButtonsRootRectTransform(browser));
             }
         }
@@ -659,9 +668,9 @@ namespace BetterInventoryBrowser
         private static void UpdateLayoutMode(LayoutMode layoutMode)
         {
             _config?.Set(SelectedLayoutModeKey, layoutMode);
-            InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
             foreach (var browser in GetPatchTargetBrowsers())
             {
+                browser.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
                 BuildSortButtons(GetSortButtonsRootRectTransform(browser));
             }
         }
