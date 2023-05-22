@@ -447,6 +447,14 @@ namespace BetterInventoryBrowser
                 BuildRightSidebar(GetRightSidebarRectTransform(__instance), (InventoryItemUI)currentItem);
             }
 
+            [HarmonyPostfix]
+            [HarmonyPatch("RecordManager_RecordSaved")]
+            static void RecordManager_RecordSaved_Postfix(Record record)
+            {
+                // https://github.com/hantabaru1014/BetterInventoryBrowser/issues/4
+                record.LastModificationTime = record.LastModificationTime.ToLocalTime();
+            }
+
             static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories, InventoryBrowser instance)
             {
                 if (!IsPatchTarget(instance)) return directories;
