@@ -13,7 +13,7 @@ namespace BetterInventoryBrowser
             if (!_groupNames.ContainsKey(groupId))
             {
                 _groupNames.Clear();
-                foreach (var group in Engine.Current.Cloud.CurrentUserMemberships)
+                foreach (var group in Engine.Current.Cloud.Groups.CurrentUserMemberships)
                 {
                     _groupNames.Add(group.GroupId, group.GroupName);
                 }

@@ -1,28 +1,27 @@
 ﻿using System.Collections.Generic;
 using HarmonyLib;
-using NeosModLoader;
+using ResoniteModLoader;
 using FrooxEngine;
 using FrooxEngine.UIX;
-using BaseX;
-using CodeX;
+using Elements.Core;
 using System.Linq;
 using System.Reflection.Emit;
 using System.Reflection;
 using System;
+using Elements.Assets;
 
 namespace BetterInventoryBrowser
 {
-    public class BetterInventoryBrowser : NeosMod
+    public class BetterInventoryBrowser : ResoniteMod
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.5.2";
+        public override string Version => "0.6.0";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
-        private const string MOD_ID = "dev.baru.neos.BetterInventoryBrowser";
+        private const string MOD_ID = "dev.baru.resonite.BetterInventoryBrowser";
         private const string SIDEBAR_RECT_ID = $"{MOD_ID}.SidebarRect";
         private const string RIGHT_SIDEBAR_RECT_ID = $"{MOD_ID}.RightSidebarRect";
-        private const string SORTBTNS_ROOT_RECT_ID = $"{MOD_ID}.SortButtonsRootRect";
         private const string SIDEBAR_TOGGLE_TXT_ID = $"{MOD_ID}.SidebarToggleButton.Text";
         private const string RIGHT_SIDEBAR_TOGGLE_TXT_ID = $"{MOD_ID}.RightSidebarToggleButton.Text";
 
@@ -37,10 +36,7 @@ namespace BetterInventoryBrowser
             new ModConfigurationKey<bool>("_IsOpenRightSidebar", "IsOpenRightSidebar", () => false, true);
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<SortMethod> SelectedSortMethodKey =
-            new ModConfigurationKey<SortMethod>("_SelectedSortMethod", "SelectedSortMethod", () => SortMethod.Default, true);
-        [AutoRegisterConfigKey]
-        public static readonly ModConfigurationKey<LayoutMode> SelectedLayoutModeKey =
-            new ModConfigurationKey<LayoutMode>("_SelectedLayoutMode", "SelectedLayoutMode", () => LayoutMode.DefaultGrid, true);
+            new ModConfigurationKey<SortMethod>("_SelectedSortMethod", "SortMethod", () => SortMethod.Default);
 
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<int> MaxRecentDirectoryCountKey =
@@ -57,12 +53,6 @@ namespace BetterInventoryBrowser
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<float> RightSidebarWidthKey =
             new ModConfigurationKey<float>("RightSidebarWidth", "Width of RightSidebar", () => 180f);
-        [AutoRegisterConfigKey]
-        public static readonly ModConfigurationKey<float> DetailRowHeightKey =
-            new ModConfigurationKey<float>("DetailRowHeight", "Row height in detail layout", () => BrowserDialog.DEFAULT_ITEM_SIZE / 2);
-        [AutoRegisterConfigKey]
-        public static readonly ModConfigurationKey<float> NameWidthOnDetailKey =
-            new ModConfigurationKey<float>("NameWidthOnDetail", "Width of name column in detail layout", () => 0.7f, false, (v) => 0 < v && v < 1);
 
         private static ModConfiguration? _config;
         private static List<RecordDirectoryInfo> _recentDirectories = new List<RecordDirectoryInfo>();
@@ -102,10 +92,6 @@ namespace BetterInventoryBrowser
                     GetRightSidebarRectTransform(browser).Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(RightSidebarWidthKey) ?? 180f;
                     ReGridLayout(browser);
                 }
-            }
-            if (configEvent.Key == DetailRowHeightKey || configEvent.Key == NameWidthOnDetailKey)
-            {
-                InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
             }
         }
 
@@ -188,16 +174,6 @@ namespace BetterInventoryBrowser
 
                 ____swapper.Target = contentRt.Slot.AttachComponent<SlideSwapRegion>(true, null);
                 originalSwapperSlot.RemoveAllComponents(component => component.WorkerType != typeof(RectTransform));
-
-                var header2 = ____buttonsRoot.Target.Parent;
-                header2.DestroyChildren();
-                var uiBuilder2 = new UIBuilder(header2);
-                uiBuilder2.SplitHorizontally(0.3f, out var leftRt, out var rightRt);
-                var buttonsBuilder = new UIBuilder(rightRt);
-                buttonsBuilder.HorizontalLayout(0f, 0f, Alignment.MiddleRight).ForceExpandWidth.Value = false;
-                ____buttonsRoot.Target = buttonsBuilder.Root;
-                leftRt.Slot.AttachComponent<Comment>().Text.Value = SORTBTNS_ROOT_RECT_ID;
-                BuildSortButtons(leftRt);
             }
 
             [HarmonyPostfix]
@@ -208,132 +184,17 @@ namespace BetterInventoryBrowser
                 if (pathChain is null) return;
                 ____pathRoot.Target[0].GetComponent<HorizontalLayout>().ForceExpandWidth.Value = false;
                 var uiBuilder = new UIBuilder(____pathRoot.Target[0]);
+                RadiantUI_Constants.SetupDefaultStyle(uiBuilder);
                 var currentDir = new RecordDirectoryInfo(inventoryBrowser.CurrentDirectory);
                 var pinnedDirs = _config?.GetValue(PinnedDirectoriesKey) ?? new List<RecordDirectoryInfo>();
-                var btn = uiBuilder.Button(pinnedDirs.Contains(currentDir) ? "★" : "☆", color.Yellow);
+                var btn = uiBuilder.Button(pinnedDirs.Contains(currentDir) ? "★" : "☆");
+                btn.Label.Color.Value = colorX.Yellow;
                 btn.LocalPressed += (IButton button, ButtonEventData eventData) =>
                 {
                     TogglePinCurrentDirectory();
                     UpdatePinButtonText(btn, currentDir);
                 };
                 btn.Slot.GetComponent<LayoutElement>().PreferredWidth.Value = 40f;
-            }
-
-            [HarmonyTranspiler]
-            [HarmonyPatch("SetPath")]
-            static IEnumerable<CodeInstruction> SetPath_Transpiler(IEnumerable<CodeInstruction> instructions)
-            {
-                var codes = instructions.ToList();
-                var onGoUpMethod = AccessTools.Method(typeof(BrowserDialog), "OnGoUp");
-                var foundOnGoUp = false;
-                for (var i = 0; i < codes.Count; i++)
-                {
-                    if (codes[i].opcode == OpCodes.Ldftn && codes[i].OperandIs(onGoUpMethod))
-                    {
-                        foundOnGoUp = true;
-                        continue;
-                    }
-                    // HACK: 本当はcode.Calls(UIBuilder::Button)みたいに直接探したいが、MethodInfoがGenericのせいで上手く取得できない
-                    if (foundOnGoUp && codes[i].opcode == OpCodes.Pop && codes[i-1].opcode == OpCodes.Callvirt)
-                    {
-                        codes[i] = new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(BrowserDialog_Patch), nameof(BrowserDialog_Patch.SetFlexibleWidthToOne)));
-                        Msg("Patched BrowserDialog.SetPath");
-                        break;
-                    }
-                }
-                return codes.AsEnumerable();
-            }
-
-            [HarmonyTranspiler]
-            [HarmonyPatch("GenerateContent")]
-            static IEnumerable<CodeInstruction> GenerateContent_Transpiler(IEnumerable<CodeInstruction> instructions)
-            {
-                var foundLdfldGrid = false;
-                var inReplaceArea = false;
-                var isPatched = false;
-                var gridField = AccessTools.Field(typeof(BrowserDialog), "_grid");
-                var setTargetMethod = AccessTools.Method(typeof(SyncRef<GridLayout>), "set_Target");
-
-                foreach (var code in instructions)
-                {
-                    if (inReplaceArea)
-                    {
-                        if (code.Calls(setTargetMethod))
-                        {
-                            inReplaceArea = false;
-                            isPatched = true;
-                        }
-                        continue;
-                    }
-                    if (!foundLdfldGrid && code.LoadsField(gridField))
-                    {
-                        foundLdfldGrid = true;
-                    }
-                    if (!isPatched && foundLdfldGrid && !inReplaceArea && code.IsLdloc())
-                    {
-                        inReplaceArea = true;
-                        yield return code;
-                        yield return new CodeInstruction(OpCodes.Ldarg_0);
-                        yield return new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(BrowserDialog), nameof(BrowserDialog.ItemSize)));
-                        yield return new CodeInstruction(OpCodes.Ldarg_0);
-                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(BrowserDialog_Patch), nameof(BuildLayout)));
-                        continue;
-                    }
-                    yield return code;
-                }
-            }
-
-            [HarmonyTranspiler]
-            [HarmonyPatch("GenerateBackButton")]
-            static IEnumerable<CodeInstruction> GenerateBackButton_Transpiler(IEnumerable<CodeInstruction> instructions)
-            {
-                var codes = instructions.ToList();
-                if (codes[codes.Count - 2].opcode == OpCodes.Pop)
-                {
-                    codes[codes.Count - 2] = new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(BrowserDialog_Patch), nameof(FixBackButtonLayout)));
-                    codes.Insert(codes.Count - 2, new CodeInstruction(OpCodes.Ldarg_0));
-                }
-                else
-                {
-                    Error("Failed to patch BrowserDialog.GenerateBackButton: Unexpected sequence of IL");
-                }
-                return codes.AsEnumerable();
-            }
-
-            static void SetFlexibleWidthToOne(Button button)
-            {
-                button.Slot.GetComponent<LayoutElement>().FlexibleWidth.Value = 1f;
-            }
-
-            static void BuildLayout(SyncRef<GridLayout> grid, UIBuilder uiBuilder, Sync<float> itemSize, BrowserDialog instance)
-            {
-                if (typeof(InventoryBrowser).IsInstanceOfType(instance)
-                    && ((InventoryBrowser)instance).CurrentDirectory != null
-                    && ((InventoryBrowser)instance).CurrentDirectory.Path != "NONE"
-                    && IsPatchTarget(instance)
-                    && (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
-                {
-                    uiBuilder.VerticalLayout(4, 4, Alignment.TopLeft);
-                }
-                else
-                {
-                    var cellSize = float2.One * itemSize.Value;
-                    var spacing = float2.One * 4;
-                    grid.Target = uiBuilder.GridLayout(in cellSize, in spacing);
-                }
-            }
-
-            static void FixBackButtonLayout(Button button, BrowserDialog instance)
-            {
-                if (typeof(FileBrowser).IsInstanceOfType(instance)) return;
-                if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail
-                    && typeof(InventoryBrowser).IsInstanceOfType(instance)
-                    && ((InventoryBrowser)instance).CurrentDirectory != null
-                    && ((InventoryBrowser)instance).CurrentDirectory.Path != "NONE"
-                    && IsPatchTarget(instance))
-                {
-                    FixItemLayoutElement(button.Slot);
-                }
             }
         }
 
@@ -397,15 +258,8 @@ namespace BetterInventoryBrowser
             {
                 var getSubdirMethod = AccessTools.PropertyGetter(typeof(RecordDirectory), "Subdirectories");
                 var getRecordsMethod = AccessTools.PropertyGetter(typeof(RecordDirectory), "Records");
-                var getThumbnailUriMethod = AccessTools.PropertyGetter(typeof(Record), nameof(Record.ThumbnailURI));
-                var processItemMethod = AccessTools.Method(typeof(InventoryBrowser), "ProcessItem");
                 foreach (var code in instructions)
                 {
-                    if (code.Calls(processItemMethod))
-                    {
-                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(ProcessItem4DetailLayout)));
-                        Msg("Patched InventoryBrowser.UpdateDirectoryItems ProcessItem4DetailLayout");
-                    }
                     yield return code;
                     if (code.Calls(getSubdirMethod))
                     {
@@ -419,23 +273,6 @@ namespace BetterInventoryBrowser
                         yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortRecords)));
                         Msg("Patched InventoryBrowser.UpdateDirectoryItems for records");
                     }
-                    else if (code.Calls(getThumbnailUriMethod))
-                    {
-                        yield return new CodeInstruction(OpCodes.Ldarg_0);
-                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(FilterIconUri)));
-                        Msg("Patched FilterIconUri");
-                    }
-                }
-            }
-
-            [HarmonyPostfix]
-            [HarmonyPatch("ProcessItem")]
-            static void ProcessItem_Postfix(InventoryBrowser __instance, InventoryItemUI item)
-            {
-                if (__instance.CurrentDirectory != null && IsPatchTarget(__instance)
-                    && (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.Detail)
-                {
-                    FixItemLayoutElement(item.Slot);
                 }
             }
 
@@ -507,32 +344,6 @@ namespace BetterInventoryBrowser
                 }
             }
 
-            static string FilterIconUri(string uri, InventoryBrowser instance)
-            {
-                if (!IsPatchTarget(instance)) return uri;
-                return (_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) == LayoutMode.DefaultGrid ? uri : string.Empty;
-            }
-
-            static InventoryItemUI ProcessItem4DetailLayout(InventoryItemUI item)
-            {
-                if ((_config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid) != LayoutMode.Detail
-                    || item.Inventory.CurrentDirectory is null
-                    || item.Inventory.CurrentDirectory.Path == "NONE"
-                    || !IsPatchTarget(item.Inventory))
-                {
-                    return item;
-                }
-                var btnSlot = item.Slot;
-                btnSlot.DestroyChildren();
-                var uiBuilder = new UIBuilder(btnSlot);
-                uiBuilder.HorizontalLayout(5f, 5f, Alignment.MiddleLeft);
-                uiBuilder.Text(SanitizeItemName4Detail(item.ItemName), true, Alignment.MiddleLeft)
-                    .Slot.GetComponent<LayoutElement>().FlexibleWidth.Value = _config?.GetValue(NameWidthOnDetailKey) ?? 0.7f;
-                uiBuilder.Text(GetLastModTimeText(item), true, Alignment.MiddleLeft);
-
-                return item;
-            }
-
             static string GetLastModTimeText(InventoryItemUI item)
             {
                 var record = _iiui_itemField.GetValue(item) as Record;
@@ -592,18 +403,6 @@ namespace BetterInventoryBrowser
             Default, Name, Updated, Created
         }
 
-        public enum LayoutMode
-        {
-            DefaultGrid, NoImgGrid, Detail
-        }
-
-        static void FixItemLayoutElement(Slot slot)
-        {
-            var elm = slot.GetComponent<LayoutElement>();
-            elm.MinHeight.Value = _config?.GetValue(DetailRowHeightKey) ?? BrowserDialog.DEFAULT_ITEM_SIZE / 2;
-            elm.FlexibleWidth.Value = 1;
-        }
-
         public static bool IsPatchTarget(BrowserDialog instance)
         {
             // とりあえず LegacyInventory を対象にしない
@@ -634,66 +433,20 @@ namespace BetterInventoryBrowser
             return GetRectTransformById(instance, RIGHT_SIDEBAR_RECT_ID);
         }
 
-        public static RectTransform GetSortButtonsRootRectTransform(InventoryBrowser instance)
-        {
-            return GetRectTransformById(instance, SORTBTNS_ROOT_RECT_ID);
-        }
-
-        private static void BuildSortButtons(RectTransform rootRect)
-        {
-            rootRect.Slot.DestroyChildren();
-            var uiBuilder = new UIBuilder(rootRect);
-            uiBuilder.HorizontalLayout(4f, 4f, Alignment.MiddleLeft);
-
-            uiBuilder.Text("Sort:");
-            uiBuilder.FitContent(SizeFit.MinSize, SizeFit.Disabled);
-            var selectedMethod = _config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default;
-            var btn = uiBuilder.Button(selectedMethod.ToString());
-            btn.LocalPressed += (IButton btn, ButtonEventData data) =>
-            {
-                UpdateSortMethod((SortMethod)(((int)selectedMethod + 1) % Enum.GetValues(typeof(SortMethod)).Length));
-            };
-
-            uiBuilder.Text("Layout:");
-            uiBuilder.FitContent(SizeFit.MinSize, SizeFit.Disabled);
-            var selectedLayout = _config?.GetValue(SelectedLayoutModeKey) ?? LayoutMode.DefaultGrid;
-            var layoutBtn = uiBuilder.Button(selectedLayout.ToString());
-            layoutBtn.LocalPressed += (IButton btn, ButtonEventData data) =>
-            {
-                UpdateLayoutMode((LayoutMode)(((int)selectedLayout + 1) % Enum.GetValues(typeof(LayoutMode)).Length));
-            };
-        }
-
-        private static void UpdateSortMethod(SortMethod sortMethod)
-        {
-            _config?.Set(SelectedSortMethodKey, sortMethod);
-            foreach (var browser in GetPatchTargetBrowsers())
-            {
-                browser.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
-                BuildSortButtons(GetSortButtonsRootRectTransform(browser));
-            }
-        }
-
-        private static void UpdateLayoutMode(LayoutMode layoutMode)
-        {
-            _config?.Set(SelectedLayoutModeKey, layoutMode);
-            foreach (var browser in GetPatchTargetBrowsers())
-            {
-                browser.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
-                BuildSortButtons(GetSortButtonsRootRectTransform(browser));
-            }
-        }
-
         private static readonly MethodInfo _generateContentMethod = AccessTools.Method(typeof(BrowserDialog), "GenerateContent");
         private static void BuildDirectoryButtons(Slot rootSlot, List<RecordDirectoryInfo> directories)
         {
             var uiBuilder = new UIBuilder(rootSlot);
+            RadiantUI_Constants.SetupDefaultStyle(uiBuilder);
             uiBuilder.ScrollArea(Alignment.TopCenter);
             uiBuilder.VerticalLayout(8f, 0f, Alignment.TopCenter).ForceExpandHeight.Value = false;
             uiBuilder.FitContent(SizeFit.Disabled, SizeFit.PreferredSize);
             foreach (var dir in directories)
             {
-                var itemBtn = uiBuilder.Button(dir.GetFriendlyPath());
+                var itemBtn = uiBuilder.Button(dir.GetFriendlyPath(), InventoryBrowser.FOLDER_COLOR);
+                itemBtn.Label.AlignmentMode.Value = AlignmentMode.LineBased;
+                itemBtn.Label.RectTransform.AddFixedPadding(-8f, 2f, 8f, 2f);
+                itemBtn.Label.Size.Value *= 0.75f;
                 itemBtn.Slot.GetComponent<LayoutElement>().MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE * 0.5f;
                 itemBtn.LocalPressed += async (IButton btn, ButtonEventData data) =>
                 {
@@ -703,7 +456,7 @@ namespace BetterInventoryBrowser
                         return;
                     }
                     Msg($"Open : {dir}");
-                    _generateContentMethod.Invoke(InventoryBrowser.CurrentUserspaceInventory, new object[] { SlideSwapRegion.Slide.Right, true });
+                    _generateContentMethod.Invoke(InventoryBrowser.CurrentUserspaceInventory, new object?[] { SlideSwapRegion.Slide.Right, null, null, true });
                     var recordDir = await dir.ToRecordDirectory();
                     InventoryBrowser.CurrentUserspaceInventory.RunSynchronously(() =>
                     {
@@ -724,13 +477,13 @@ namespace BetterInventoryBrowser
             var vertLayout = uiBuilder.VerticalLayout(8f, 0f, Alignment.TopCenter);
             vertLayout.ForceExpandHeight.Value = false;
 
-            uiBuilder.Text("Pinned");
+            uiBuilder.Text("<color=white>Pinned");
             var pinnedDirsPanel = uiBuilder.Panel().Slot;
             pinnedDirsPanel.GetComponent<LayoutElement>().FlexibleHeight.Value = 1f;
             BuildDirectoryButtons(pinnedDirsPanel, _config?.GetValue(PinnedDirectoriesKey) ?? new List<RecordDirectoryInfo>());
             uiBuilder.NestOut();
 
-            uiBuilder.Text("Recent");
+            uiBuilder.Text("<color=white>Recent");
             var recentDirsPanel = uiBuilder.Panel().Slot;
             recentDirsPanel.GetComponent<LayoutElement>().FlexibleHeight.Value = 1f;
             BuildDirectoryButtons(recentDirsPanel, _recentDirectories);
@@ -762,8 +515,7 @@ namespace BetterInventoryBrowser
             }
             if (entryRecord is not null)
             {
-                uiBuilder.Text($"<b>LastUpdated:</b>\n{entryRecord.LastModificationTime}").HorizontalAlign.Value = TextHorizontalAlignment.Left;
-                uiBuilder.Text($"<b>UpdatedUser:</b>\n{entryRecord.LastModifyingUserId}").HorizontalAlign.Value = TextHorizontalAlignment.Left;
+                uiBuilder.Text($"<color=white><b>LastUpdated:</b>\n{entryRecord.LastModificationTime}").HorizontalAlign.Value = TextHorizontalAlignment.Left;
             }
         }
 
@@ -802,14 +554,7 @@ namespace BetterInventoryBrowser
         private static void ReGridLayout(BrowserDialog instance)
         {
             var layoutRootSlot = ((SyncRef<SlideSwapRegion>)AccessTools.Field(typeof(BrowserDialog), "_swapper").GetValue(instance)).Target.Slot;
-            if (_config?.GetValue(SelectedLayoutModeKey) == LayoutMode.Detail)
-            {
-                layoutRootSlot = layoutRootSlot.GetComponentInChildren<VerticalLayout>().Slot;
-            }
-            else
-            {
-                layoutRootSlot = layoutRootSlot.GetComponentInChildren<GridLayout>().Slot;
-            }
+            layoutRootSlot = layoutRootSlot.GetComponentInChildren<GridLayout>().Slot;
             var dummy = layoutRootSlot.AddSlot("dummy", false);
             layoutRootSlot.RunInUpdates(3, () =>
             {
