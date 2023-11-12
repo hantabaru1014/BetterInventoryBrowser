@@ -5,7 +5,7 @@ A [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoade
 Until v0.5.x, this was a mod for neos. Check [README for neos](https://github.com/hantabaru1014/BetterInventoryBrowser/tree/neos).
 
 ## Current features
-![screenshot](https://user-images.githubusercontent.com/16133291/236672368-20c84717-c45f-46e9-85bc-c9442548e7b2.png)
+![screenshot](https://github.com/hantabaru1014/BetterInventoryBrowser/assets/16133291/dd821a83-c6c2-424d-9f9d-3f3e3509e9e5)
 
 - Added a sidebar to the left of the inventory
     - Pin directory to the sidebar
