@@ -17,7 +17,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.6.0";
+        public override string Version => "0.6.1";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         private const string MOD_ID = "dev.baru.resonite.BetterInventoryBrowser";
@@ -93,6 +93,10 @@ namespace BetterInventoryBrowser
                     GetRightSidebarRectTransform(browser).Slot.GetComponent<LayoutElement>().PreferredWidth.Value = _config?.GetValue(RightSidebarWidthKey) ?? 180f;
                     ReGridLayout(browser);
                 }
+            }
+            if (configEvent.Key == SelectedSortMethodKey)
+            {
+                ReOpenInventory();
             }
         }
 
@@ -279,9 +283,9 @@ namespace BetterInventoryBrowser
 
             [HarmonyPostfix]
             [HarmonyPatch("OnItemSelected")]
-            static void OnItemSelected_Postfix(InventoryBrowser __instance, BrowserItem currentItem)
+            static void OnItemSelected_Postfix(InventoryBrowser __instance, BrowserItem? currentItem)
             {
-                if (!IsPatchTarget(__instance)) return;
+                if (!IsPatchTarget(__instance) || currentItem is null) return;
                 BuildRightSidebar(GetRightSidebarRectTransform(__instance), (InventoryItemUI)currentItem);
             }
 
@@ -491,8 +495,9 @@ namespace BetterInventoryBrowser
             uiBuilder.NestOut();
         }
 
-        private static void BuildRightSidebar(RectTransform rectTransform, InventoryItemUI item)
+        private static void BuildRightSidebar(RectTransform rectTransform, InventoryItemUI? item)
         {
+            if (rectTransform is null) return;
             rectTransform.Slot.DestroyChildren();
             if (item is null) return;
 
@@ -561,6 +566,15 @@ namespace BetterInventoryBrowser
             {
                 dummy.Destroy();
             });
+        }
+
+        private static void ReOpenInventory()
+        {
+            InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
+            foreach (var browser in GetPatchTargetBrowsers())
+            {
+                BuildRightSidebar(GetRightSidebarRectTransform(browser), null);
+            }
         }
     }
 }
