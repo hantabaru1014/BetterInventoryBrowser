@@ -29,6 +29,9 @@
     <Reference Include="FrooxEngine">
       <HintPath>$(AppPath)$(AppName)_Data\Managed\FrooxEngine.dll</HintPath>
     </Reference>
+    <Reference Include="FrooxEngine.Store">
+      <HintPath>$(AppPath)$(AppName)_Data\Managed\FrooxEngine.Store.dll</HintPath>
+    </Reference>
     <Reference Include="Elements.Core">
       <HintPath>$(AppPath)$(AppName)_Data\Managed\Elements.Core.dll</HintPath>
     </Reference>

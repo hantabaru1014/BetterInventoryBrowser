@@ -2,6 +2,7 @@
 using HarmonyLib;
 using ResoniteModLoader;
 using FrooxEngine;
+using FrooxEngine.Store;
 using FrooxEngine.UIX;
 using Elements.Core;
 using System.Linq;
