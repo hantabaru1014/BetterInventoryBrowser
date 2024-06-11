@@ -41,6 +41,9 @@
     <Reference Include="SkyFrost.Base">
       <HintPath>$(AppPath)$(AppName)_Data\Managed\SkyFrost.Base.dll</HintPath>
     </Reference>
+    <Reference Include="SkyFrost.Base.Models">
+      <HintPath>$(AppPath)$(AppName)_Data\Managed\SkyFrost.Base.Models.dll</HintPath>
+    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(AppPath)$(AppName)_Data\Managed\Newtonsoft.Json.dll</HintPath>
     </Reference>
