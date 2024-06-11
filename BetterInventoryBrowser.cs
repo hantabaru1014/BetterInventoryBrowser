@@ -17,7 +17,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.6.1";
+        public override string Version => "0.6.2";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         private const string MOD_ID = "dev.baru.resonite.BetterInventoryBrowser";
@@ -444,7 +444,7 @@ namespace BetterInventoryBrowser
             var uiBuilder = new UIBuilder(rootSlot);
             RadiantUI_Constants.SetupDefaultStyle(uiBuilder);
             uiBuilder.ScrollArea(Alignment.TopCenter);
-            uiBuilder.VerticalLayout(8f, 0f, Alignment.TopCenter).ForceExpandHeight.Value = false;
+            uiBuilder.VerticalLayout(8f, 0f, Alignment.TopCenter, null, false);
             uiBuilder.FitContent(SizeFit.Disabled, SizeFit.PreferredSize);
             foreach (var dir in directories)
             {
