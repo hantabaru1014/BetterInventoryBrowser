@@ -26,6 +26,8 @@ namespace BetterInventoryBrowser
         private const string SIDEBAR_TOGGLE_TXT_ID = $"{MOD_ID}.SidebarToggleButton.Text";
         private const string RIGHT_SIDEBAR_TOGGLE_TXT_ID = $"{MOD_ID}.RightSidebarToggleButton.Text";
 
+        private const SlideSwapRegion.Slide SWAPREGION_ON_OPEN = SlideSwapRegion.Slide.Right;
+
         [AutoRegisterConfigKey]
         public static readonly ModConfigurationKey<List<RecordDirectoryInfo>> PinnedDirectoriesKey = 
             new ModConfigurationKey<List<RecordDirectoryInfo>>("_PinnedDirectories", "PinnedDirectories", () => new List<RecordDirectoryInfo>(), true);
@@ -57,6 +59,8 @@ namespace BetterInventoryBrowser
 
         private static ModConfiguration? _config;
         private static List<RecordDirectoryInfo> _recentDirectories = new List<RecordDirectoryInfo>();
+        private static string _searchText = string.Empty;
+        private static TextField? _searchField;
 
         private static FieldInfo _iiui_itemField = AccessTools.Field(typeof(InventoryItemUI), "Item");
         private static FieldInfo _iiui_directoryField = AccessTools.Field(typeof(InventoryItemUI), "Directory");
@@ -96,7 +100,8 @@ namespace BetterInventoryBrowser
             }
             if (configEvent.Key == SelectedSortMethodKey)
             {
-                ReOpenInventory();
+                OpenDirectory(null);
+                BuildRightSidebar(GetRightSidebarRectTransform(InventoryBrowser.CurrentUserspaceInventory), null);
             }
         }
 
@@ -110,7 +115,8 @@ namespace BetterInventoryBrowser
                 if (!(__instance is InventoryBrowser) || __instance.World != Userspace.UserspaceWorld || !IsPatchTarget(__instance)) return;
                 var originalSwapperSlot = ____swapper.Target.Slot;
                 var uiBuilder = new UIBuilder(originalSwapperSlot);
-                uiBuilder.HorizontalLayout(0, 0, Alignment.TopLeft).ForceExpandWidth.Value = false;
+                RadiantUI_Constants.SetupDefaultStyle(uiBuilder);
+                uiBuilder.HorizontalLayout(1, 0, Alignment.TopLeft).ForceExpandWidth.Value = false;
 
                 // Toggle Sidebar Button
                 uiBuilder.Panel().Slot.GetComponent<LayoutElement>().PreferredWidth.Value = 0;
@@ -211,6 +217,9 @@ namespace BetterInventoryBrowser
             static void Open_Postfix(InventoryBrowser __instance, RecordDirectory directory)
             {
                 if (!IsPatchTarget(__instance)) return;
+
+                ClearSearchField();
+
                 if (directory is null)
                 {
                     // ShowInventoryOwnersからnullで呼ばれたタイミングではキャッシュクリアする
@@ -269,13 +278,13 @@ namespace BetterInventoryBrowser
                     if (code.Calls(getSubdirMethod))
                     {
                         yield return new CodeInstruction(OpCodes.Ldarg_0);
-                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortDirectories)));
+                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(FilterDirectories)));
                         Msg("Patched InventoryBrowser.UpdateDirectoryItems for directories");
                     }
                     else if (code.Calls(getRecordsMethod))
                     {
                         yield return new CodeInstruction(OpCodes.Ldarg_0);
-                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(SortRecords)));
+                        yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(InventoryBrowser_Patch), nameof(FilterRecords)));
                         Msg("Patched InventoryBrowser.UpdateDirectoryItems for records");
                     }
                 }
@@ -297,9 +306,17 @@ namespace BetterInventoryBrowser
                 record.LastModificationTime = record.LastModificationTime.ToLocalTime();
             }
 
-            static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories, InventoryBrowser instance)
+            static IReadOnlyList<RecordDirectory> FilterDirectories(IReadOnlyList<RecordDirectory> directories, InventoryBrowser instance)
             {
                 if (!IsPatchTarget(instance)) return directories;
+
+                var queries = _searchText.Split(' ').Where(q => !string.IsNullOrWhiteSpace(q)).ToList();
+                var filtered = queries.Count == 0 ? directories : directories.Where(d => queries.All(q => d.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+                return SortDirectories(filtered, instance);
+            }
+
+            static IReadOnlyList<RecordDirectory> SortDirectories(IReadOnlyList<RecordDirectory> directories, InventoryBrowser instance)
+            {
                 switch (_config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default)
                 {
                     case SortMethod.Updated:
@@ -323,9 +340,17 @@ namespace BetterInventoryBrowser
                 }
             }
 
-            static IReadOnlyList<Record> SortRecords(IReadOnlyList<Record> records, InventoryBrowser instance)
+            static IReadOnlyList<Record> FilterRecords(IReadOnlyList<Record> records, InventoryBrowser instance)
             {
                 if (!IsPatchTarget(instance)) return records;
+
+                var queries = _searchText.Split(' ').Where(q => !string.IsNullOrWhiteSpace(q)).ToList();
+                var filtered = queries.Count == 0 ? records : records.Where(r => queries.All(q => r.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+                return SortRecords(filtered, instance);
+            }
+
+            static IReadOnlyList<Record> SortRecords(IReadOnlyList<Record> records, InventoryBrowser instance)
+            {
                 switch (_config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default)
                 {
                     case SortMethod.Default:
@@ -439,6 +464,43 @@ namespace BetterInventoryBrowser
         }
 
         private static readonly MethodInfo _generateContentMethod = AccessTools.Method(typeof(BrowserDialog), "GenerateContent");
+        private static void MakeLoading()
+        {
+            _generateContentMethod.Invoke(InventoryBrowser.CurrentUserspaceInventory, new object?[] { SWAPREGION_ON_OPEN, null, null, true });
+        }
+
+        private static void OpenDirectory(RecordDirectory? directory, bool withoutSwap = false)
+        {
+            if (directory is null)
+            {
+                directory = InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory;
+            }
+            InventoryBrowser.CurrentUserspaceInventory.RunSynchronously(() =>
+            {
+                InventoryBrowser.CurrentUserspaceInventory?.Open(directory, withoutSwap ? SlideSwapRegion.Slide.None : SWAPREGION_ON_OPEN);
+            }, true);
+        }
+
+        private static readonly MethodInfo _openDirectoryMethod = AccessTools.Method(typeof(InventoryBrowser), "OpenDirectory");
+        private static void ApplyFilters()
+        {
+            _openDirectoryMethod.Invoke(InventoryBrowser.CurrentUserspaceInventory, new object?[] { InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.None });
+        }
+
+        private static void ClearSearchField()
+        {
+            _searchText = string.Empty;
+            if (_searchField is not null)
+            {
+#pragma warning disable CS8625 // null リテラルを null 非許容参照型に変換できません。
+                _searchField.Text.Content.Value = null;
+#pragma warning restore CS8625 // null リテラルを null 非許容参照型に変換できません。
+            } else
+            {
+                BuildRightSidebar(GetRightSidebarRectTransform(InventoryBrowser.CurrentUserspaceInventory), null);
+            }
+        }
+
         private static void BuildDirectoryButtons(Slot rootSlot, List<RecordDirectoryInfo> directories)
         {
             var uiBuilder = new UIBuilder(rootSlot);
@@ -461,12 +523,9 @@ namespace BetterInventoryBrowser
                         return;
                     }
                     Msg($"Open : {dir}");
-                    _generateContentMethod.Invoke(InventoryBrowser.CurrentUserspaceInventory, new object?[] { SlideSwapRegion.Slide.Right, null, null, true });
+                    MakeLoading();
                     var recordDir = await dir.ToRecordDirectory();
-                    InventoryBrowser.CurrentUserspaceInventory.RunSynchronously(() =>
-                    {
-                        InventoryBrowser.CurrentUserspaceInventory?.Open(recordDir, SlideSwapRegion.Slide.Right);
-                    }, true);
+                    OpenDirectory(recordDir, true);
                 };
             }
         }
@@ -479,33 +538,30 @@ namespace BetterInventoryBrowser
             if (rectTransform.Engine.Cloud.CurrentUser is null) return;
 
             var uiBuilder = new UIBuilder(rectTransform);
-            var vertLayout = uiBuilder.VerticalLayout(8f, 0f, Alignment.TopCenter);
+            var vertLayout = uiBuilder.VerticalLayout(5f, 0f, Alignment.TopCenter);
             vertLayout.ForceExpandHeight.Value = false;
 
             uiBuilder.Text("<color=white>Pinned");
-            var pinnedDirsPanel = uiBuilder.Panel().Slot;
+            var pinnedDirsPanel = uiBuilder.Panel(RadiantUI_Constants.BG_COLOR).Slot;
             pinnedDirsPanel.GetComponent<LayoutElement>().FlexibleHeight.Value = 1f;
             BuildDirectoryButtons(pinnedDirsPanel, _config?.GetValue(PinnedDirectoriesKey) ?? new List<RecordDirectoryInfo>());
             uiBuilder.NestOut();
 
             uiBuilder.Text("<color=white>Recent");
-            var recentDirsPanel = uiBuilder.Panel().Slot;
+            var recentDirsPanel = uiBuilder.Panel(RadiantUI_Constants.BG_COLOR).Slot;
             recentDirsPanel.GetComponent<LayoutElement>().FlexibleHeight.Value = 1f;
             BuildDirectoryButtons(recentDirsPanel, _recentDirectories);
             uiBuilder.NestOut();
         }
 
-        private static void BuildRightSidebar(RectTransform rectTransform, InventoryItemUI? item)
+        private static void BuildItemDetailPanel(Slot panelSlot, InventoryItemUI? item)
         {
-            if (rectTransform is null) return;
-            rectTransform.Slot.DestroyChildren();
             if (item is null) return;
 
-            var uiBuilder = new UIBuilder(rectTransform);
+            var uiBuilder = new UIBuilder(panelSlot);
             var vertLayout = uiBuilder.VerticalLayout(8f, 10f, Alignment.TopCenter);
             vertLayout.ForceExpandHeight.Value = false;
             vertLayout.ForceExpandWidth.Value = true;
-
             Record? entryRecord = null;
             if (_iiui_itemField.GetValue(item) is Record record)
             {
@@ -523,6 +579,76 @@ namespace BetterInventoryBrowser
             {
                 uiBuilder.Text($"<color=white><b>LastUpdated:</b>\n{entryRecord.LastModificationTime}").HorizontalAlign.Value = TextHorizontalAlignment.Left;
             }
+        }
+
+        private static void UpdateSortMethod(SortMethod sortMethod)
+        {
+            _config?.Set(SelectedSortMethodKey, sortMethod);
+            ApplyFilters();
+        }
+
+        private static void BuildFiltersPanel(Slot panelSlot)
+        {
+            var uiBuilder = new UIBuilder(panelSlot);
+            RadiantUI_Constants.SetupDefaultStyle(uiBuilder);
+            var vertLayout = uiBuilder.VerticalLayout(2f, 0f, Alignment.TopLeft);
+            uiBuilder.FitContent(SizeFit.Disabled, SizeFit.PreferredSize);
+
+#pragma warning disable CS8625 // null リテラルを null 非許容参照型に変換できません。
+            var searchField = uiBuilder.TextField(null, false, "", false, "search words");
+#pragma warning restore CS8625 // null リテラルを null 非許容参照型に変換できません。
+            _searchField = searchField;
+            searchField.Slot.GetComponent<LayoutElement>().MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE * 0.5f;
+            if (!string.IsNullOrEmpty(_searchText))
+            {
+                searchField.Text.Content.Value = _searchText;
+            }
+            searchField.Editor.Target.FinishHandling.Value = TextEditor.FinishAction.NullOnWhitespace;
+            searchField.Editor.Target.LocalEditingChanged += OnSearchFieldChanged;
+
+            uiBuilder.Text("<color=white>Sort by").Size.Value *= 0.4f;
+            var selectedMethod = _config?.GetValue(SelectedSortMethodKey) ?? SortMethod.Default;
+            var btn = uiBuilder.Button(selectedMethod.ToString());
+            btn.Label.AlignmentMode.Value = AlignmentMode.LineBased;
+            btn.Label.RectTransform.AddFixedPadding(-8f, 2f, 8f, 2f);
+            btn.Label.Size.Value *= 0.75f;
+            btn.Slot.GetComponent<LayoutElement>().MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE * 0.5f;
+            btn.LocalPressed += (IButton btn, ButtonEventData data) =>
+            {
+                UpdateSortMethod((SortMethod)(((int)selectedMethod + 1) % Enum.GetValues(typeof(SortMethod)).Length));
+            };
+        }
+
+        private static void OnSearchFieldChanged(TextEditor editor)
+        {
+            var query = editor.Text.Target.Text;
+            if (query == _searchText) return;
+            _searchText = query;
+
+            ApplyFilters();
+        }
+
+        private static void BuildRightSidebar(RectTransform rectTransform, InventoryItemUI? item)
+        {
+            if (rectTransform is null) return;
+            rectTransform.Slot.DestroyChildren();
+
+            var uiBuilder = new UIBuilder(rectTransform);
+            var vertLayout = uiBuilder.VerticalLayout(5f, 0, Alignment.TopCenter);
+            vertLayout.ForceExpandHeight.Value = false;
+            vertLayout.ForceExpandWidth.Value = true;
+
+            uiBuilder.Text("<color=white>Filters");
+            var filtersPanel = uiBuilder.Panel(RadiantUI_Constants.BG_COLOR).Slot;
+            filtersPanel.GetComponent<LayoutElement>().MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE * 1.5f;
+            BuildFiltersPanel(filtersPanel);
+            uiBuilder.NestOut();
+
+            uiBuilder.Text("<color=white>Details");
+            var detailsPanel = uiBuilder.Panel(RadiantUI_Constants.BG_COLOR).Slot;
+            detailsPanel.GetComponent<LayoutElement>().FlexibleHeight.Value = 1f;
+            BuildItemDetailPanel(detailsPanel, item);
+            uiBuilder.NestOut();
         }
 
         private static void ReBuildAllSidebars()
@@ -566,15 +692,6 @@ namespace BetterInventoryBrowser
             {
                 dummy.Destroy();
             });
-        }
-
-        private static void ReOpenInventory()
-        {
-            InventoryBrowser.CurrentUserspaceInventory.Open(InventoryBrowser.CurrentUserspaceInventory.CurrentDirectory, SlideSwapRegion.Slide.Left);
-            foreach (var browser in GetPatchTargetBrowsers())
-            {
-                BuildRightSidebar(GetRightSidebarRectTransform(browser), null);
-            }
         }
     }
 }
