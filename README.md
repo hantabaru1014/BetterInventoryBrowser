@@ -17,6 +17,7 @@ Until v0.5.x, this was a mod for neos. Check [README for neos](https://github.co
 - Added a sidebar to the right of the inventory
     - Display thumbnails, update date, etc.
     - The sidebar can be shown/hide and width can be set on settings
+- Word search in current directory
 
 ## Installation
 1. Install [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoader).
