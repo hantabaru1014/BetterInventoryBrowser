@@ -105,7 +105,7 @@ namespace BetterInventoryBrowser
         {
             [HarmonyPostfix]
             [HarmonyPatch("OnAttach")]
-            static void OnAttach_Postfix(BrowserDialog __instance, SyncRef<SlideSwapRegion> ____swapper, SyncRef<Slot> ____buttonsRoot)
+            public static void OnAttach_Postfix(BrowserDialog __instance, SyncRef<SlideSwapRegion> ____swapper, SyncRef<Slot> ____buttonsRoot)
             {
                 if (!(__instance is InventoryBrowser) || __instance.World != Userspace.UserspaceWorld || !IsPatchTarget(__instance)) return;
                 var originalSwapperSlot = ____swapper.Target.Slot;
@@ -177,13 +177,13 @@ namespace BetterInventoryBrowser
                 };
                 uiBuilder.NestOut();
 
-                ____swapper.Target = contentRt.Slot.AttachComponent<SlideSwapRegion>(true, null);
+                ____swapper.Target = contentRt.Slot.AttachComponent<SlideSwapRegion>();
                 originalSwapperSlot.RemoveAllComponents(component => component.WorkerType != typeof(RectTransform));
             }
 
             [HarmonyPostfix]
             [HarmonyPatch("SetPath")]
-            static void SetPath_Postfix(BrowserDialog __instance, SyncRef<Slot> ____pathRoot, List<string> pathChain)
+            public static void SetPath_Postfix(BrowserDialog __instance, SyncRef<Slot> ____pathRoot, List<string> pathChain)
             {
                 if (!(__instance is InventoryBrowser inventoryBrowser) || __instance.World != Userspace.UserspaceWorld || !IsPatchTarget(__instance)) return;
                 if (pathChain is null) return;
