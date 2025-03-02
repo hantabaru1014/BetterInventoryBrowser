@@ -577,7 +577,7 @@ namespace BetterInventoryBrowser
             }
             if (entryRecord is not null)
             {
-                uiBuilder.Text($"<color=white><b>LastUpdated:</b>\n{entryRecord.LastModificationTime}").HorizontalAlign.Value = TextHorizontalAlignment.Left;
+                uiBuilder.Text($"<color=white><b>LastUpdated:</b>\n{entryRecord.LastModificationTime.ToLocalTime()}").HorizontalAlign.Value = TextHorizontalAlignment.Left;
             }
         }
 
