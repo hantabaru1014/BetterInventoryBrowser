@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <LangVersion>10</LangVersion>
     <Nullable>enable</Nullable>
     <AppName>Resonite</AppName>
@@ -13,7 +13,7 @@
     <CopyToMods Condition="'$(CopyToMods)'==''">true</CopyToMods>
     <DebugSymbols Condition="'$(Configuration)'=='Release'">false</DebugSymbols>
     <DebugType Condition="'$(Configuration)'=='Release'">None</DebugType>
-    <Version>0.7.0</Version>
+    <Version>0.7.1</Version>
     <Authors>hantabaru1014</Authors>
   </PropertyGroup>
 
@@ -27,25 +27,25 @@
       <HintPath>$(AppPath)Libraries\$(AppName)ModLoader.dll</HintPath>
     </Reference>
     <Reference Include="FrooxEngine">
-      <HintPath>$(AppPath)$(AppName)_Data\Managed\FrooxEngine.dll</HintPath>
+      <HintPath>$(AppPath)FrooxEngine.dll</HintPath>
     </Reference>
     <Reference Include="FrooxEngine.Store">
-      <HintPath>$(AppPath)$(AppName)_Data\Managed\FrooxEngine.Store.dll</HintPath>
+      <HintPath>$(AppPath)FrooxEngine.Store.dll</HintPath>
     </Reference>
     <Reference Include="Elements.Core">
-      <HintPath>$(AppPath)$(AppName)_Data\Managed\Elements.Core.dll</HintPath>
+      <HintPath>$(AppPath)Elements.Core.dll</HintPath>
     </Reference>
     <Reference Include="Elements.Assets">
-      <HintPath>$(AppPath)$(AppName)_Data\Managed\Elements.Assets.dll</HintPath>
+      <HintPath>$(AppPath)Elements.Assets.dll</HintPath>
     </Reference>
     <Reference Include="SkyFrost.Base">
-      <HintPath>$(AppPath)$(AppName)_Data\Managed\SkyFrost.Base.dll</HintPath>
+      <HintPath>$(AppPath)SkyFrost.Base.dll</HintPath>
     </Reference>
     <Reference Include="SkyFrost.Base.Models">
-      <HintPath>$(AppPath)$(AppName)_Data\Managed\SkyFrost.Base.Models.dll</HintPath>
+      <HintPath>$(AppPath)SkyFrost.Base.Models.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>$(AppPath)$(AppName)_Data\Managed\Newtonsoft.Json.dll</HintPath>
+      <HintPath>$(AppPath)Newtonsoft.Json.dll</HintPath>
     </Reference>
   </ItemGroup>
 

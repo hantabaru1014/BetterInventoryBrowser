@@ -35,7 +35,7 @@ namespace BetterInventoryBrowser
             var rootName = Path.Split('\\')[0];
             var rootRecord = new RecordDirectory(RootOwnerId, rootName, Engine.Current);
             var result = rootName != Path ? await rootRecord.GetSubdirectoryAtPath(Path.Substring(rootName.Length + 1)) : rootRecord;
-            _cache.Add(this, result);
+            _cache.TryAdd(this, result);
             return result;
         }
 
