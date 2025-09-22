@@ -17,7 +17,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.7.0";
+        public override string Version => "0.7.1";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         private const string MOD_ID = "dev.baru.resonite.BetterInventoryBrowser";
