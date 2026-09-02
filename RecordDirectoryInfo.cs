@@ -1,5 +1,6 @@
 ﻿using FrooxEngine;
 using Newtonsoft.Json;
+using ResoniteModLoader;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -26,17 +27,73 @@ namespace BetterInventoryBrowser
             Path = recordDirectory.GetRelativePath(true);
         }
 
-        public async Task<RecordDirectory> ToRecordDirectory()
+        public async Task<RecordDirectory?> ToRecordDirectory()
         {
             if (_cache.TryGetValue(this, out var cachedRecordDir))
             {
                 return cachedRecordDir;
             }
-            var rootName = Path.Split('\\')[0];
-            var rootRecord = new RecordDirectory(RootOwnerId, rootName, Engine.Current);
-            var result = rootName != Path ? await rootRecord.GetSubdirectoryAtPath(Path.Substring(rootName.Length + 1)) : rootRecord;
-            _cache.TryAdd(this, result);
-            return result;
+            var segments = Path.Split('\\');
+            var current = GetRootRecordDirectory(segments[0]);
+            for (var i = 1; i < segments.Length; i++)
+            {
+                var next = await FindSubdirectory(current, segments[i]);
+                if (next is null)
+                {
+                    ResoniteMod.Warn($"Directory not found: {segments[i]} in {current.Path}");
+                    return null;
+                }
+                current = next;
+            }
+            _cache.TryAdd(this, current);
+            return current;
+        }
+
+        private RecordDirectory GetRootRecordDirectory(string rootName)
+        {
+            var engine = Engine.Current;
+            // 既にブラウザが持っているツリーを再利用して、同じディレクトリを二重にロードしないようにする
+            var browserRoot = InventoryBrowser.CurrentUserspaceInventory?.CurrentDirectory?.GetRootDirectory();
+            if (browserRoot is not null && browserRoot.OwnerId == RootOwnerId && browserRoot.Name == rootName)
+            {
+                return browserRoot;
+            }
+            var inventoryRoot = engine.Cloud.InventoryRootDirectory;
+            if (inventoryRoot is not null && inventoryRoot.OwnerId == RootOwnerId && inventoryRoot.Name == rootName)
+            {
+                return inventoryRoot;
+            }
+            return new RecordDirectory(RootOwnerId, rootName, engine);
+        }
+
+        private static async Task<RecordDirectory?> FindSubdirectory(RecordDirectory directory, string name)
+        {
+            // https://github.com/hantabaru1014/BetterInventoryBrowser/issues/13
+            // RecordDirectory.GetSubdirectoryAtPath は各階層をクラウドから直接フルロードするため、
+            // ローカルキャッシュとマージされず、ディレクトリ内の全レコードが LocalDB に再キャッシュされて
+            // 数秒後に大量の DB 書き込みが走り、フレームレートが落ちる。
+            // vanilla の InventoryBrowser.OpenDirectory と同様に、まずローカルキャッシュから読み込む。
+            if (directory.CurrentLoadState == RecordDirectory.LoadState.NotLoaded)
+            {
+                try
+                {
+                    await directory.TryLocalCacheLoad();
+                }
+                catch (Exception e)
+                {
+                    ResoniteMod.Warn($"Failed to load local cache of {directory.Path}: {e}");
+                }
+            }
+            if (directory.CurrentLoadState != RecordDirectory.LoadState.NotLoaded)
+            {
+                var cached = directory.GetSubdirectory(name);
+                if (cached is not null)
+                {
+                    return cached;
+                }
+            }
+            await directory.EnsureFullyLoaded();
+            return directory.GetSubdirectory(name);
         }
 
         public static void ClearCache()

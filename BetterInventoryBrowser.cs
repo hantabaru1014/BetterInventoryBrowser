@@ -17,7 +17,7 @@ namespace BetterInventoryBrowser
     {
         public override string Name => "BetterInventoryBrowser";
         public override string Author => "hantabaru1014";
-        public override string Version => "0.7.2";
+        public override string Version => "0.7.3";
         public override string Link => "https://github.com/hantabaru1014/BetterInventoryBrowser";
 
         private const string MOD_ID = "dev.baru.resonite.BetterInventoryBrowser";
@@ -524,7 +524,16 @@ namespace BetterInventoryBrowser
                     }
                     Msg($"Open : {dir}");
                     MakeLoading();
-                    var recordDir = await dir.ToRecordDirectory();
+                    RecordDirectory? recordDir = null;
+                    try
+                    {
+                        recordDir = await dir.ToRecordDirectory();
+                    }
+                    catch (Exception e)
+                    {
+                        Error($"Failed to open {dir}: {e}");
+                    }
+                    // 見つからなかった場合は現在のディレクトリを開き直してローディング表示を解除する
                     OpenDirectory(recordDir, true);
                 };
             }
