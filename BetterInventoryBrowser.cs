@@ -515,6 +515,10 @@ namespace BetterInventoryBrowser
                 itemBtn.Label.RectTransform.AddFixedPadding(-8f, 2f, 8f, 2f);
                 itemBtn.Label.Size.Value *= 0.75f;
                 itemBtn.Slot.GetComponent<LayoutElement>().MinHeight.Value = BrowserDialog.DEFAULT_ITEM_SIZE * 0.5f;
+                // ScrollArea 内でドラッグスクロールした時にフォルダが開かないようにする (#17)
+                // 標準の Button は触れた瞬間に Pressed が発火するが、これを有効にすると
+                // ほぼ動かさずに離した時のみ発火し、ドラッグは ScrollRect に渡される (ContactsDialog 等と同じ挙動)
+                itemBtn.RequireLockInToPress.Value = true;
                 itemBtn.LocalPressed += async (IButton btn, ButtonEventData data) =>
                 {
                     if (InventoryBrowser.CurrentUserspaceInventory.Engine.Cloud.CurrentUser is null)
