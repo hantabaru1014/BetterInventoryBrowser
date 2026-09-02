@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <LangVersion>10</LangVersion>
     <Nullable>enable</Nullable>
     <AppName>Resonite</AppName>
@@ -13,7 +13,7 @@
     <CopyToMods Condition="'$(CopyToMods)'==''">true</CopyToMods>
     <DebugSymbols Condition="'$(Configuration)'=='Release'">false</DebugSymbols>
     <DebugType Condition="'$(Configuration)'=='Release'">None</DebugType>
-    <Version>0.7.1</Version>
+    <Version>0.7.2</Version>
     <Authors>hantabaru1014</Authors>
   </PropertyGroup>
 
